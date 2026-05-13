@@ -6,10 +6,16 @@ import globals from "globals";
 
 export default ts.config(
   js.configs.recommended,
-  ...ts.configs.strict,
+  ...ts.configs.strictTypeChecked,
+  ...ts.configs.stylisticTypeChecked,
   ...svelte.configs.recommended,
   {
     languageOptions: {
+      parserOptions: {
+        projectService: true,
+        extraFileExtensions: [".svelte"],
+        tsconfigRootDir: import.meta.dirname,
+      },
       globals: {
         ...globals.browser,
         ...globals.node,
@@ -37,6 +43,9 @@ export default ts.config(
       parser: svelteParser,
       parserOptions: {
         parser: ts.parser,
+        projectService: true,
+        extraFileExtensions: [".svelte"],
+        tsconfigRootDir: import.meta.dirname,
       },
     },
     rules: {
@@ -49,7 +58,18 @@ export default ts.config(
     rules: {
       // shadcn-svelte primitives use a navigation pattern the rule misreads.
       "svelte/no-navigation-without-resolve": "off",
+      // Generated patterns from shadcn-svelte; would resurface on every component re-add.
+      "@typescript-eslint/no-useless-default-assignment": "off",
     },
+  },
+  {
+    files: ["*.config.{js,ts}", "*.config.*.{js,ts}"],
+    languageOptions: {
+      parserOptions: {
+        projectService: false,
+      },
+    },
+    extends: [ts.configs.disableTypeChecked],
   },
   {
     ignores: [".svelte-kit/", "build/", "node_modules/", ".vercel/", "src/paraglide/"],
