@@ -30,3 +30,6 @@ src/paraglide
 
 # Local scratch
 /tmp
+
+# Claude Code
+.claude/settings.local.json
