@@ -1,12 +1,14 @@
 # docolin
 
-> Documentation for everything technical. Owned by no one, accessible to everyone, structured for both humans and AI.
+> Structured knowledge for everything. Owned by no one. Accessible to everyone. Built for both humans and AI.
 
 ## The vision
 
-Technical docs in 2026 are fragmented and stale. ArchWiki is technically the best but scares newcomers. Friendly sites are scattered blog posts with no structure. AI hallucinates because there's no clean ground-truth dataset for fast-moving technical content. Contributors burn out as LLMs scrape their work without attribution.
+Knowledge on the internet in 2026 is fragmented and stale. ArchWiki is technically the best Linux resource but scares newcomers. Friendly resources are scattered blog posts with no structure. AI hallucinates because there's no clean, current, community-verified dataset to ground against. Contributors burn out as LLMs scrape their work without attribution.
 
-docolin is a community-driven docs platform built to be the substrate AI grounds against and humans actually enjoy reading. Launching with Linux as the first vertical (Win10 EOL is sending a generational wave of newcomers), architected from day one to scale across all technical documentation.
+docolin is a community-driven knowledge platform built to be the substrate AI grounds against and humans actually enjoy reading. We launch with Linux help for newcomers (Win10 EOL is sending a generational migration wave), but the architecture is content-agnostic from day one. Whether you write Linux troubleshooting guides, framework references, hardware reviews, or gardening how-tos, the same platform handles the boring 95% so you focus on the content.
+
+Free for everyone, forever. No paid plan, no private docs, no premium tier. Funded by sponsorship from infrastructure companies whose tooling benefits from being part of the substrate AI grounds against.
 
 ## Core ideas
 
@@ -57,3 +59,7 @@ All addresses are hosted on Proton Mail and support end-to-end encryption.
 ## License
 
 [AGPL-3.0](./LICENSE)
+
+---
+
+_Mascot: a pangolin. Overlapping scales like a structured knowledge tree, curls up to defend itself like docs that actually protect the people reading them._
