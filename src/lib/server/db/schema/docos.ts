@@ -13,19 +13,21 @@ import {
   vector,
 } from "drizzle-orm/pg-core";
 import { gitSources } from "./git-sources";
-import { orgs } from "./orgs";
+import { projects } from "./projects";
 import { ltree } from "./types";
 import { users } from "./users";
 
-// Stable doco identity. Owned by an org (every namespace is an org, including
-// personal namespaces, which are orgs auto-provisioned at user signup).
+// Stable doco identity. Belongs to a project (which is owned by an org).
+// `git_source_id` and `path_in_source` are denormalized from the project's
+// source for the sync hot-path; they let "did this file come from that git
+// source?" lookups skip the project join.
 export const docos = pgTable(
   "docos",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    ownerOrgId: uuid("owner_org_id")
+    projectId: uuid("project_id")
       .notNull()
-      .references(() => orgs.id, { onDelete: "restrict" }),
+      .references(() => projects.id, { onDelete: "cascade" }),
     gitSourceId: uuid("git_source_id").references(() => gitSources.id, {
       onDelete: "set null",
     }),
@@ -35,7 +37,7 @@ export const docos = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
-    index("docos_owner_org_idx").on(t.ownerOrgId),
+    index("docos_project_idx").on(t.projectId),
     index("docos_git_source_idx").on(t.gitSourceId),
     uniqueIndex("docos_git_source_path_unique")
       .on(t.gitSourceId, t.pathInSource)

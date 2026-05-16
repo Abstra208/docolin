@@ -17,7 +17,7 @@ export interface ProvisionResult {
 
 // Single transaction that turns a freshly authed WorkOS identity into a real
 // docolin account: user row, personal org row, link user->org, membership.
-// All-or-nothing — if any step fails (unique-constraint conflict, etc.), the
+// All-or-nothing: if any step fails (unique-constraint conflict, etc.), the
 // transaction rolls back and the caller can surface a friendly error.
 export async function provisionUser(input: ProvisionInput): Promise<ProvisionResult> {
   return db.transaction(async (tx) => {

@@ -1,6 +1,7 @@
 export * from "./types";
 export * from "./accounts";
 export * from "./roles";
+export * from "./projects";
 export * from "./git-sources";
 export * from "./kinds";
 export * from "./docos";

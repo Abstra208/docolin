@@ -1204,6 +1204,28 @@ const RESERVED_PREFIXES_LIST = [
 ] as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
+// RESERVED PROJECT SLUGS
+// Second URL segment under `/{org}/{project}/...`. Excludes the small set of
+// project-level admin routes so a project slug never collides with them.
+// Handle-level reserved lists DON'T apply here, only this list does.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const RESERVED_PROJECT_SLUGS_LIST = [
+  // Admin routes mounted at /dashboard/{org}/{project}/{x} and any future
+  // public-side per-project routes
+  "settings",
+  "members",
+  "source",
+  "sources",
+  "new",
+  "edit",
+  "delete",
+  "transfer",
+  "clone",
+  "fork",
+] as const;
+
+// ─────────────────────────────────────────────────────────────────────────────
 // FORMAT RULES
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1261,6 +1283,7 @@ export const SYSTEM_NAMES: ReadonlySet<string> = new Set(SYSTEM_NAMES_LIST);
 export const PRERESERVED_NAMES: ReadonlySet<string> = new Set(PRERESERVED_NAMES_LIST);
 export const RESERVED_SUFFIXES: ReadonlySet<string> = new Set(RESERVED_SUFFIXES_LIST);
 export const RESERVED_PREFIXES: ReadonlySet<string> = new Set(RESERVED_PREFIXES_LIST);
+export const RESERVED_PROJECT_SLUGS: ReadonlySet<string> = new Set(RESERVED_PROJECT_SLUGS_LIST);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AVAILABILITY CHECK
@@ -1327,6 +1350,39 @@ export function checkHandleAvailability(input: string): HandleAvailability {
     if (handle.endsWith(suffix)) {
       return { ok: false, reason: "matches_suffix", detail: suffix };
     }
+  }
+  return { ok: true };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROJECT SLUG AVAILABILITY
+// Mirrors the handle validator but with a smaller reserved set and a shorter
+// min length. Project slugs can be 2 chars (e.g. `ui`, `db`).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const MIN_PROJECT_SLUG_LENGTH = 2;
+export const MAX_PROJECT_SLUG_LENGTH = 30;
+
+export type ProjectSlugAvailability =
+  | { ok: true }
+  | {
+      ok: false;
+      reason: "too_short" | "too_long" | "invalid_format" | "reserved";
+    };
+
+export function checkProjectSlugAvailability(input: string): ProjectSlugAvailability {
+  const slug = input.trim().toLowerCase();
+  if (slug.length < MIN_PROJECT_SLUG_LENGTH) {
+    return { ok: false, reason: "too_short" };
+  }
+  if (slug.length > MAX_PROJECT_SLUG_LENGTH) {
+    return { ok: false, reason: "too_long" };
+  }
+  if (!isValidHandleFormat(slug)) {
+    return { ok: false, reason: "invalid_format" };
+  }
+  if (RESERVED_PROJECT_SLUGS.has(slug)) {
+    return { ok: false, reason: "reserved" };
   }
   return { ok: true };
 }
