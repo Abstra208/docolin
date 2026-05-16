@@ -5,4 +5,7 @@ export * from "./git-sources";
 export * from "./kinds";
 export * from "./docos";
 export * from "./discussions";
+export * from "./moderation";
+export * from "./inbox";
+export * from "./media";
 export * from "./search-logs";

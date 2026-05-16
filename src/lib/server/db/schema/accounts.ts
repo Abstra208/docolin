@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   pgTable,
   primaryKey,
@@ -26,6 +27,9 @@ export const users = pgTable(
     personalOrgId: uuid("personal_org_id").references((): AnyPgColumn => orgs.id, {
       onDelete: "set null",
     }),
+    // Platform-level admin (docolin operators). Set manually in the database, no UI
+    // to grant. Bypasses org/repo permissions for moderation actions.
+    isPlatformAdmin: boolean("is_platform_admin").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
