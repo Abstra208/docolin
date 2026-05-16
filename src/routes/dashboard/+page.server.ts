@@ -29,7 +29,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 
   // Pending claims this user filed. Approved claims have already become orgs
   // (shown in the grid above), cancelled/expired aren't actionable, so the
-  // dashboard surfaces only "pending" — they need the user to send the
+  // dashboard surfaces only "pending", since they need the user to send the
   // verification email before anything moves.
   const pendingClaims = await db
     .select({

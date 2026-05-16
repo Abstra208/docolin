@@ -1,0 +1,1 @@
+ALTER TABLE "claim_requests" ADD COLUMN "requested_display_name" text;

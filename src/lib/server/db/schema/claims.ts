@@ -18,6 +18,10 @@ export const claimRequests = pgTable(
     // Short human-friendly token for quoting in support emails (e.g. 'clm-xyz123').
     uid: text("uid").notNull().unique(),
     requestedSlug: text("requested_slug").notNull(),
+    // The display name the user picked on the org-create form. Carried
+    // through to the new org row when the claim is approved. Nullable
+    // because the form's display-name field is itself optional.
+    requestedDisplayName: text("requested_display_name"),
     requestedByUserId: uuid("requested_by_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),

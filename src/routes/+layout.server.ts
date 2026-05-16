@@ -14,6 +14,7 @@ export const load: LayoutServerLoad = ({ locals }) => {
       ? {
           handle: locals.dbUser.handle,
           displayName: locals.dbUser.displayName,
+          isPlatformAdmin: locals.dbUser.isPlatformAdmin,
         }
       : null,
   };

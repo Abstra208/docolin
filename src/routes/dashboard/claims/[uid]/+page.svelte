@@ -14,7 +14,7 @@
   // mailto: link with subject + body prefilled from i18n templates, then URL-
   // encoded. The user's mail client opens with everything filled in; they can
   // edit before sending. Without sending this email, nothing happens on our
-  // side — the claim row sits idle until a domain-matched address writes in.
+  // side; the claim row sits idle until a domain-matched address writes in.
   // Context comes from the `details` they typed on the claim form; name from
   // their account displayName. Either falls back to a bracketed placeholder
   // so it's obvious what to fill in.

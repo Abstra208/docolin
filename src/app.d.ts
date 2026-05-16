@@ -18,7 +18,11 @@ declare global {
     // `page.data.dbUser` with full typing.
     interface PageData {
       auth: { email: string } | null;
-      dbUser: { handle: string; displayName: string | null } | null;
+      dbUser: {
+        handle: string;
+        displayName: string | null;
+        isPlatformAdmin: boolean;
+      } | null;
     }
     // interface PageState {}
     // interface Platform {}

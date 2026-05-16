@@ -40,6 +40,15 @@
           </a>
         {/snippet}
       </DropdownMenu.Item>
+      {#if dbUser.isPlatformAdmin}
+        <DropdownMenu.Item>
+          {#snippet child({ props })}
+            <a href="/dashboard/admin/claims" {...props}>
+              {m.nav_admin()}
+            </a>
+          {/snippet}
+        </DropdownMenu.Item>
+      {/if}
       <DropdownMenu.Separator />
       <DropdownMenu.Item>
         {#snippet child({ props })}

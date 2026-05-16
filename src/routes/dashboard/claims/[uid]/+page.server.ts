@@ -15,6 +15,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
     .select({
       uid: claimRequests.uid,
       requestedSlug: claimRequests.requestedSlug,
+      requestedDisplayName: claimRequests.requestedDisplayName,
       status: claimRequests.status,
       details: claimRequests.details,
       createdAt: claimRequests.createdAt,
@@ -30,6 +31,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
     claim: {
       uid: claim.uid,
       slug: claim.requestedSlug,
+      displayName: claim.requestedDisplayName,
       status: claim.status,
       details: claim.details,
       createdAt: claim.createdAt.toISOString(),

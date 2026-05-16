@@ -58,6 +58,7 @@ export const actions = {
           .values({
             uid,
             requestedSlug: slug,
+            requestedDisplayName: displayName,
             requestedByUserId: locals.dbUser.id,
             details: claimDetails,
           })
