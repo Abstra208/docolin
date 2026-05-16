@@ -350,6 +350,20 @@ Avoid `try-catch` blocks. Prefer preventing errors from being thrown in the firs
 
 Use `before` prefix for events that fire before an action (e.g. `beforeopen` and `open`).
 
+### 3.8 Don't Use Regex [4/5]
+
+Avoid regular expressions outside of ad-hoc command-line use. Regex is hard to read, hard to maintain, almost always subtly wrong, and brittle in ways that bite in production months later.
+
+Typical disasters: parsing email or IP addresses, replacing build-time tokens, rolling your own string interpolations, validating names, parsing phone numbers, validating street numbers, enforcing a zip code globally, searching in a database via a live query, parsing a date or a time.
+
+**Prefer instead:**
+
+- String operations: `startsWith`, `endsWith`, `includes`, `split`, character-by-character iteration.
+- Proper parsers: `URL` constructor for URLs, `Date.parse` for dates, dedicated libraries for emails / phones / locales / time zones.
+- Typed schemas: Zod or similar for input validation at API boundaries.
+
+If you genuinely need a regex (rare: tokenizers, syntax highlighters, some path matchers), comment it heavily and link a test that pins the exact inputs and expected outputs. Default position: there is a simpler tool.
+
 ---
 
 ## 4. Spacing System

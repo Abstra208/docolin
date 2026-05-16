@@ -173,10 +173,10 @@ Examples:
 
 One of the four [Diátaxis](https://diataxis.fr) values:
 
-- `tutorial` — learning-oriented. Walks a reader through learning something.
-- `how-to` — task-oriented. Solves a specific problem.
-- `reference` — information-oriented. Lookup material.
-- `explanation` — understanding-oriented. Conceptual context.
+- `tutorial`: learning-oriented. Walks a reader through learning something.
+- `how-to`: task-oriented. Solves a specific problem.
+- `reference`: information-oriented. Lookup material.
+- `explanation`: understanding-oriented. Conceptual context.
 
 Single-valued. Pick the dominant intent of the guide. The same topic can have multiple guides of different types (a `tutorial` for newcomers and a `reference` for experts), each at its own `kind`.
 

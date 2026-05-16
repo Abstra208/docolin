@@ -72,6 +72,14 @@ export default ts.config(
     extends: [ts.configs.disableTypeChecked],
   },
   {
-    ignores: [".svelte-kit/", "build/", "node_modules/", ".vercel/", "src/paraglide/", "tmp/"],
+    ignores: [
+      ".svelte-kit/",
+      "build/",
+      "node_modules/",
+      ".vercel/",
+      "src/paraglide/",
+      "tmp/",
+      "scripts/",
+    ],
   },
 );
