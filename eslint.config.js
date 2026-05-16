@@ -60,6 +60,11 @@ export default ts.config(
       "svelte/no-navigation-without-resolve": "off",
       // Generated patterns from shadcn-svelte; would resurface on every component re-add.
       "@typescript-eslint/no-useless-default-assignment": "off",
+      // $bindable() defaults type as any inside shadcn primitives; rewriting
+      // them on every component re-add is not worth the lint signal.
+      "@typescript-eslint/no-unsafe-assignment": "off",
+      // shadcn primitives use `||` for fallback values; not worth rewriting.
+      "@typescript-eslint/prefer-nullish-coalescing": "off",
     },
   },
   {

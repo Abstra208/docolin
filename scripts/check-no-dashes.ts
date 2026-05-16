@@ -5,8 +5,9 @@
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
-const EM_DASH = "—";
-const EN_DASH = "–";
+// Defined via escape sequences so the rule-enforcer file itself stays clean.
+const EM_DASH = "\u2014";
+const EN_DASH = "\u2013";
 
 // Lines that document the rule itself naturally include the forbidden characters.
 function isAllowedException(line: string): boolean {
@@ -32,7 +33,7 @@ for (const file of files) {
     const line = lines[i];
     if (!line.includes(EM_DASH) && !line.includes(EN_DASH)) continue;
     if (isAllowedException(line)) continue;
-    violations.push(`  ${file}:${i + 1}: ${line.trim()}`);
+    violations.push(`  ${file}:${(i + 1).toString()}: ${line.trim()}`);
   }
 }
 

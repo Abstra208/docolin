@@ -128,5 +128,32 @@
   }
   html {
     @apply font-sans;
+    /* Firefox: thin scrollbar with neutral gray thumb on transparent track. */
+    scrollbar-width: thin;
+    scrollbar-color: rgb(0 0 0 / 0.2) transparent;
+  }
+
+  /* Webkit/Blink: transparent track, subtle neutral-gray thumb that darkens
+   * on hover. The track shows the html background through it; that's a
+   * native-scrollbar constraint (the bar can't truly overlay content). */
+  ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+    background: transparent;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(0 0 0 / 0.2);
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(0 0 0 / 0.35);
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
   }
 }
