@@ -17,7 +17,7 @@
 </script>
 
 <Select.Root type="single" value={getLocale()} onValueChange={changeLocale}>
-  <Select.Trigger class="h-9 w-auto" aria-label={m.nav_lang_aria()}>
+  <Select.Trigger class="h-9! w-auto" aria-label={m.nav_lang_aria()}>
     <span class="font-mono text-xs tracking-tight uppercase">{getLocale()}</span>
   </Select.Trigger>
   <Select.Content align="end" preventScroll={false}>

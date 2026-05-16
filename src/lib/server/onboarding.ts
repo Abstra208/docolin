@@ -55,3 +55,37 @@ export async function provisionUser(input: ProvisionInput): Promise<ProvisionRes
     return { user: linkedUser, personalOrg: insertedOrg };
   });
 }
+
+export interface ProvisionOrgInput {
+  founderUserId: string;
+  slug: string;
+  displayName: string | null;
+}
+
+export interface ProvisionOrgResult {
+  org: DbOrg;
+}
+
+// Creates a non-personal org owned by the founder. Founder is admin and the
+// only member. All-or-nothing transaction so a partial create can't leave a
+// dangling org with no admin.
+export async function provisionOrg(input: ProvisionOrgInput): Promise<ProvisionOrgResult> {
+  return db.transaction(async (tx) => {
+    const [insertedOrg] = await tx
+      .insert(orgs)
+      .values({
+        slug: input.slug,
+        displayName: input.displayName,
+        adminUserId: input.founderUserId,
+        foundedByUserId: input.founderUserId,
+      })
+      .returning();
+
+    await tx.insert(orgMembers).values({
+      orgId: insertedOrg.id,
+      userId: input.founderUserId,
+    });
+
+    return { org: insertedOrg };
+  });
+}

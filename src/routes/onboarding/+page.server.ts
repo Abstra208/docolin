@@ -109,6 +109,6 @@ export const actions = {
       return fail(500, { error: "provision_failed", handle, displayName: displayNameRaw });
     }
 
-    redirect(303, url.searchParams.get("returnTo") ?? "/");
+    redirect(303, url.searchParams.get("returnTo") ?? "/dashboard");
   },
 } satisfies Actions;
