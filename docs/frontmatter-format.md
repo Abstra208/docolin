@@ -70,6 +70,8 @@ One-sentence elevator pitch. Used in search snippets, social cards, and AI citat
 
 Original publication date in `YYYY-MM-DD` form. Defaults to the file's first git commit. Useful when content was originally published elsewhere before being ingested into docolin.
 
+_Default-from-git-commit is planned; not implemented yet. Today the field must be set explicitly._
+
 ### `authors` (required)
 
 List of contributors. Each entry is one of two shapes:
@@ -112,7 +114,7 @@ Rules:
 - **Lowercase, kebab-case** segments.
 - **Depth 2 to 5.** Hard cap at 5 enforced by the validator.
 - **First segment** must be one of the fixed top-level domains.
-- **Second segment** must be a known subject within that domain (curated through the kinds registry).
+- **Second segment** must be a known subject within that domain (curated through the kinds registry). _Planned; not implemented yet. Today the second segment is free-form._
 - **Below that**, free-form. Authors choose what makes sense.
 
 Current top-level domains:
@@ -136,6 +138,8 @@ The top-level domains above are **reserved handle names**. No user or organizati
 :::
 
 Soft links in the body resolve against this field. If a guide writes `{{kind: network/firewall/setup}}`, the resolver picks the best-matching guide with that kind for the reader's setup.
+
+_Body soft-link syntax is planned; not implemented yet. The `{{kind: ...}}` form currently passes through unchanged._
 
 ## URLs
 
@@ -222,6 +226,8 @@ A guide is **never hidden automatically** based on `applies_to`. It only disappe
 
 What strings are valid depends on the kind subtree. The kinds registry defines the vocabulary for each domain (`postgres`, `python`, `ubuntu`, `systemd`, `wayland`, etc.).
 
+_Vocabulary validation is planned; not implemented yet. Today any string is accepted._
+
 ### `language` (required)
 
 ISO 639-1 language code (`en`, `de`, `fr`, ...). Defaults to `en` if omitted.
@@ -298,6 +304,8 @@ aliases:
 ```
 
 Feeds the search index as title-equivalent phrases. May be shown to readers as "also known as." The validator warns above 10 entries; lists much longer than that usually mean keyword stuffing.
+
+_The above-10 warning is planned; not implemented yet. Today any length is accepted silently._
 
 Use this for guide-specific alternate names, like "RTX driver" for an Nvidia proprietary driver guide. General synonyms across the platform (such as GPU and graphics card) are handled by the platform-wide synonym dictionary.
 
@@ -432,6 +440,8 @@ docolin:
 
 Blog posts skip `applies_to`, `difficulty`, `time_estimate`, and other fields that don't make sense for a time-anchored personal piece. The validator dispatches based on the top-level kind.
 
+_Kind-based validator dispatch is planned; not implemented yet. Today every doc uses the same schema regardless of top-level kind._
+
 ### A hardware reference
 
 ```yaml
@@ -466,7 +476,64 @@ docolin:
 ---
 ```
 
+## Body formatting
+
+Bodies are written in CommonMark with [GitHub-Flavored Markdown](https://github.github.com/gfm/) on top, plus a small set of container directives for callouts and buttons. Common Markdown features work; less common ones are listed below as planned.
+
+### Supported today
+
+- All standard CommonMark: headings, paragraphs, lists, blockquotes, code blocks, inline code, links, images, horizontal rules, bold, italic.
+- GFM extensions: tables, task lists, strikethrough, autolinks.
+- Syntax-highlighted code blocks via Shiki. Any language Shiki ships with highlights; unknown languages fall back to plain `<pre>`.
+- Automatic heading IDs (slugified from the heading text) for `#anchor` links and the table of contents.
+- External links open in a new tab with `rel="noopener noreferrer"`. Internal links navigate in-place.
+- Container directives for callouts and a button wrapper:
+
+  ```
+  :::info
+  Useful context.
+  :::
+
+  :::warning
+  Watch out for this.
+  :::
+
+  :::danger
+  Don't do this.
+  :::
+
+  :::note
+  Neutral aside.
+  :::
+
+  :::tip
+  Pro tip.
+  :::
+
+  :::btn
+  [Open the dashboard](/dashboard)
+  :::
+  ```
+
+  Callout names match the Docusaurus / Starlight convention so imported docs render without a rewrite step.
+
+### Planned, not yet supported
+
+The following are common asks the renderer doesn't handle today. Each is straightforward to add when it comes up:
+
+- **Math.** KaTeX / MathJax / inline `$x$`.
+- **Diagrams.** Mermaid and similar.
+- **Footnotes.** Pandoc-style `[^1]`.
+- **Wikilinks.** `[[page]]`.
+- **Emoji shortcodes.** `:smile:`.
+- **MDX components.** JSX in the body is stripped by the sanitizer; only the frontmatter mapping is portable today.
+- **Soft-link body syntax.** `{{kind: ...}}` passes through unchanged. See [`kind`](#kind-required) for the planned resolver behavior.
+
+If one of these is blocking you, open a discussion on this doco or file an issue against `github.com/docolin-dev/docolin`.
+
 ## Extending other docs
+
+_Body rendering for AsciiDoc and reStructuredText is planned; not implemented yet. CommonMark / GFM is what renders today. The frontmatter mapping below is the part that's specified._
 
 If you already have docs in another format (AsciiDoc, reStructuredText, MDX), you don't need to migrate the content. Each format has its own way of expressing metadata, and the platform reads it natively. Write metadata the way your format expects it; the body stays unchanged.
 
@@ -523,6 +590,8 @@ Prerequisites
 
 MDX is Markdown with JSX components. The frontmatter is identical to plain Markdown.
 
+_JSX components in the body are planned; not implemented yet. Today the sanitizer strips them, so only the frontmatter mapping is portable._
+
 ```mdx
 ---
 title: NVIDIA driver install
@@ -548,16 +617,18 @@ docolin:
 
 ## Validation
 
+_Some checks below are still planned. They describe the intended validator behavior; not all are wired up yet._
+
 A guide is valid when:
 
 - All required fields are present (`title`, `authors`, `schema_version`, `kind`, `type`).
-- `kind` matches the registered taxonomy and is between 2 and 5 segments deep.
+- `kind` matches the registered taxonomy and is between 2 and 5 segments deep. _Registry match beyond the first segment is planned; not implemented yet. Today the first-segment domain, segment count, and segment char-class are enforced._
 - `type` is one of the four Diátaxis values.
-- `aliases` is a list of strings (a warning is emitted above 10 entries; no hard cap).
+- `aliases` is a list of strings (a warning is emitted above 10 entries; no hard cap). _Above-10 warning is planned; not implemented yet._
 - `references` is a list of well-formed URLs.
-- If `status: deprecated`, `superseded_by` is present and resolves to an existing kind.
-- `applies_to` entries are recognized by the kinds registry for this subtree.
-- `prev` and `next` resolve to existing guides (by file path within the project or by full hard reference).
+- If `status: deprecated`, `superseded_by` is present and resolves to an existing kind. _Resolution to an existing kind is planned; not implemented yet. Today only presence and link shape are checked._
+- `applies_to` entries are recognized by the kinds registry for this subtree. _Planned; not implemented yet. Today any string is accepted._
+- `prev` and `next` resolve to existing guides (by file path within the project or by full hard reference). _Today only the link shape is validated. Resolution happens at render time, where unresolved links fall back to rendering the raw string. Reject-at-validate-time is planned._
 
 The validator runs at publish time. Invalid guides are rejected with a specific message about what failed.
 
