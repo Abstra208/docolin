@@ -20,6 +20,9 @@ docolin:
   status: draft
 
   aliases: [frontmatter-spec, metadata-fields, guide-metadata]
+
+  prev: ./moderation-policy.md
+  next: /docolin/docolin/moderation-policy
 ---
 
 # docolin frontmatter format
