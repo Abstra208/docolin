@@ -1,7 +1,7 @@
 ---
 title: docolin moderation policy
 description: How docolin handles reports, removals, and content moderation.
-date: 2026-05-15
+date: 2026-05-17
 authors:
   - name: Oliver Seifert
 
