@@ -122,7 +122,7 @@ Reference: \`${claim.uid}\``,
             const supportBody = encodeURIComponent(
               `Hi docolin team,\n\nI'd like to follow up on my cancelled claim for the slug "${claim.requestedSlug}".\n\nReference id: ${sib.uid}\n\n[Explain why you believe the wrong claimant was approved, and what authority you have over this brand]\n\nThanks`,
             );
-            const supportMailto = `mailto:support@docolin.dev?subject=${supportSubject}&body=${supportBody}`;
+            const supportMailto = `mailto:support@docolin.com?subject=${supportSubject}&body=${supportBody}`;
             return {
               userId: sib.userId,
               kind: "claim_cancelled" as const,
@@ -137,7 +137,7 @@ Multiple users had pending claims for the same brand. We verified the other clai
 **What you can do**
 
 - [File a different slug](/dashboard/orgs/new) for your org
-- Email [support@docolin.dev](${supportMailto}) if you believe the wrong claimant was approved`,
+- Email [support@docolin.com](${supportMailto}) if you believe the wrong claimant was approved`,
               relatedRecordId: sib.id,
             };
           }),
@@ -196,7 +196,7 @@ export async function cancelClaim({
     const supportBody = encodeURIComponent(
       `Hi docolin team,\n\nI'd like to appeal the decision on my claim for "${claim.requestedSlug}".\n\nReference id: ${claim.uid}\n\n[Explain why you believe this was a misunderstanding, and what authority you have over this brand]\n\nThanks`,
     );
-    const supportMailto = `mailto:support@docolin.dev?subject=${supportSubject}&body=${supportBody}`;
+    const supportMailto = `mailto:support@docolin.com?subject=${supportSubject}&body=${supportBody}`;
 
     await tx.insert(inboxMessages).values({
       userId: claim.requestedByUserId,
@@ -214,7 +214,7 @@ ${notes}
 **What you can do**
 
 - [File a different slug](/dashboard/orgs/new) for your org
-- Email [support@docolin.dev](${supportMailto}) with reference \`${claim.uid}\` if this was a misunderstanding`,
+- Email [support@docolin.com](${supportMailto}) with reference \`${claim.uid}\` if this was a misunderstanding`,
       relatedRecordId: claim.id,
     });
 

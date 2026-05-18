@@ -9,7 +9,7 @@ import type { Plugin } from "unified";
 import type { Root, Image, Link } from "mdast";
 
 // Converts a doco's raw body markdown into the canonical stored form. Runs at
-// sync time. Pure body in, pure body out — frontmatter is split off upstream
+// sync time. Pure body in, pure body out, frontmatter is split off upstream
 // by the parser.
 //
 // The pipeline is a small set of remark plugins. Adding behavior means adding

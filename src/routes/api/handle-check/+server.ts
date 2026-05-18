@@ -10,9 +10,15 @@ import { checkHandleAvailability } from "$lib/reserved-handles";
 // maps to localized helper text. Treats all reserved categories as "not
 // usable for a personal handle" since the user-handle step doesn't run the
 // claim flow.
-export const GET: RequestHandler = async ({ url }) => {
+export const GET: RequestHandler = async ({ url, setHeaders }) => {
   const raw = url.searchParams.get("h") ?? "";
   const handle = raw.trim().toLowerCase();
+
+  // Edge-dedupe rapid typing. The response depends only on `?h=`, so the same
+  // handle from any user gets the same answer. 30s of edge cache covers the
+  // typing-rate window; the browser always revalidates so a user who's just
+  // claimed a handle sees the updated answer on the next keystroke.
+  setHeaders({ "cache-control": "public, max-age=0, s-maxage=30" });
 
   const shapeCheck = checkHandleAvailability(handle);
   if (!shapeCheck.ok) {

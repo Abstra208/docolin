@@ -9,7 +9,7 @@
   // Public doco-page chrome. Mirrors the dashboard navbar's style and right-
   // side widget cluster so signed-in users have visual continuity between
   // reading docs and managing them. The left side carries the kind-path
-  // breadcrumb instead of the URL breadcrumb — readers care about
+  // breadcrumb instead of the URL breadcrumb, readers care about
   // categorical location ("you're in network/firewall stuff"), not source
   // location.
   //
@@ -73,32 +73,39 @@
       </div>
     </div>
 
-    <!-- Center: search placeholder. Absolute-positioned so it sits at the
-         screen's horizontal center (not in the gap between left and right
-         clusters, which would shift with their widths). Disabled button
-         (not input) so the not-yet-functional state is unmistakable.
-         pointer-events: none on the wrapper, auto on the button so the
-         wrapper doesn't intercept clicks meant for left/right widgets. -->
+    <!-- Center: search + language as one "discovery" cluster. Absolute-
+         positioned so the cluster sits at the navbar's horizontal center
+         independent of the breadcrumb / auth slot widths. pointer-events:
+         none on the outer wrapper + auto on the inner cluster so clicks
+         meant for the breadcrumb or auth slot pass through the empty
+         gutter. Search uses h-9 + border-input + bg-transparent so it
+         baseline-matches the LanguageSwitcher's Select.Trigger; they read
+         as one cohesive control bar. -->
     <div class="pointer-events-none absolute inset-x-0 hidden items-center justify-center md:flex">
-      <button
-        type="button"
-        class="border-foreground/15 bg-background/50 pointer-events-auto inline-flex w-full max-w-md cursor-not-allowed items-center gap-2 border px-3 py-1.5 text-sm"
-        aria-label={m.home_hero_search_label()}
-        disabled
-      >
-        <Search class="text-muted-foreground size-4" />
-        <span class="text-muted-foreground">{m.home_hero_search_placeholder()}</span>
-      </button>
-    </div>
-
-    <!-- Right: locale + inbox + account. Same widgets as the dashboard nav
-         so signed-in users see consistent chrome across surfaces. -->
-    <div class="flex shrink-0 items-center gap-1.5">
-      <div class="hidden sm:block">
+      <div class="pointer-events-auto flex w-full max-w-md items-center gap-2">
+        <button
+          type="button"
+          class="border-input inline-flex h-9 flex-1 cursor-not-allowed items-center gap-2 border bg-transparent px-3 text-sm"
+          aria-label={m.home_hero_search_label()}
+          disabled
+        >
+          <Search class="text-muted-foreground size-4" />
+          <span class="text-muted-foreground">{m.home_hero_search_placeholder()}</span>
+        </button>
         <LanguageSwitcher />
       </div>
-      <InboxBell />
-      <AccountMenu />
+    </div>
+
+    <!-- Right: auth slot only. min-h-9 reserves the height of the eventual
+         buttons even when the slot is empty during loading, so the navbar
+         doesn't grow vertically when content lands. min-w-48 reserves the
+         worst-case [bell + handle] width; anon's narrower "Sign in" right-
+         aligns inside it so the right edge stays even. -->
+    <div class="flex shrink-0 items-center gap-1.5">
+      <div class="flex min-h-9 min-w-48 items-center justify-end gap-1.5">
+        <InboxBell />
+        <AccountMenu />
+      </div>
     </div>
   </nav>
 </header>

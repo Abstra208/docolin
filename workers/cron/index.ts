@@ -1,6 +1,6 @@
 // Cron worker. CF fires `scheduled()` on the schedule declared in wrangler.toml;
 // this handler just calls the docolin app's /api/cron/sync endpoint with the
-// shared secret. All sync logic lives in the main app — keeping the worker
+// shared secret. All sync logic lives in the main app, keeping the worker
 // dumb means we don't duplicate the orchestrator code or have two places to
 // update when sync changes.
 

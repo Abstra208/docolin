@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { untrack } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { enhance } from "$app/forms";
-  import { invalidateAll } from "$app/navigation";
+  import { page } from "$app/state";
   import { m } from "$paraglide/messages";
   import { getLocale, localizeHref } from "$paraglide/runtime";
   import GitBranch from "@lucide/svelte/icons/git-branch";
@@ -15,14 +15,84 @@
   import Check from "@lucide/svelte/icons/check";
   import { Button } from "$lib/components/ui/button/index.js";
   import { buildPerFilePrompt, buildAllErrorsPrompt, type PromptIssue } from "$lib/sync/ai-prompt";
-  import type { PageProps } from "./$types";
+  import { pathFromSourcePath } from "$lib/doco-urls";
 
-  let { data }: PageProps = $props();
-  const project = $derived(data.project);
-  const gitSource = $derived(data.gitSource);
-  const fileErrors = $derived(data.fileErrors);
-  const docos = $derived(data.docos);
-  const isGit = $derived(project.sourceMode === "git");
+  // URL-derived identity for the immediate-render header.
+  const orgSlug = $derived(page.params.org ?? "");
+  const projectSlug = $derived(page.params.project ?? "");
+
+  interface DocoRow {
+    id: string;
+    pathInSource: string | null;
+    deletedAt: string | null;
+    title: string;
+    description: string | null;
+    kind: string;
+    type: string;
+    status: string;
+    versionNumber: number;
+    commitSha: string | null;
+    versionTag: string | null;
+    publishedAt: string;
+  }
+  interface FileErrorRow {
+    filePath: string;
+    errorCode: string;
+    errorMessage: string;
+    errorDetails: unknown;
+    syncedAt: string;
+  }
+  interface ProjectPayload {
+    org: { slug: string; displayName: string | null };
+    project: {
+      id: string;
+      slug: string;
+      displayName: string | null;
+      sourceMode: "git" | "native";
+      createdAt: string;
+    };
+    gitSource: {
+      repoUrl: string;
+      defaultBranch: string;
+      subpath: string | null;
+      lastSyncedAt: string | null;
+      syncStatus: "idle" | "syncing" | "error";
+      syncError: string | null;
+    } | null;
+    fileErrors: FileErrorRow[];
+    docos: DocoRow[];
+  }
+
+  let payload = $state<ProjectPayload | null>(null);
+  let loadError = $state<string | null>(null);
+
+  async function loadProject(): Promise<void> {
+    loadError = null;
+    try {
+      const res = await fetch(
+        `/api/dashboard/orgs/${encodeURIComponent(orgSlug)}/projects/${encodeURIComponent(projectSlug)}`,
+        { credentials: "same-origin" },
+      );
+      if (res.status === 401) return;
+      if (!res.ok) {
+        loadError = `HTTP ${res.status.toString()}`;
+        return;
+      }
+      payload = (await res.json()) as ProjectPayload;
+    } catch (err) {
+      loadError = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  onMount(() => {
+    void loadProject();
+  });
+
+  const project = $derived(payload?.project ?? null);
+  const gitSource = $derived(payload?.gitSource ?? null);
+  const fileErrors = $derived(payload?.fileErrors ?? []);
+  const docos = $derived(payload?.docos ?? []);
+  const isGit = $derived(project === null ? null : project.sourceMode === "git");
   const isSyncing = $derived(gitSource?.syncStatus === "syncing");
   const isError = $derived(gitSource?.syncStatus === "error");
   const isFirstSync = $derived(isSyncing && gitSource?.lastSyncedAt === null);
@@ -38,18 +108,24 @@
   );
 
   // Pre-expand small error lists, collapse larger ones so the docos list
-  // stays the focal point of the page. Initial value only — once the user
-  // toggles, their choice wins even if the error list changes on re-poll.
-  // untrack signals the intentional non-reactivity.
-  let errorsExpanded = $state(untrack(() => fileErrors.length > 0 && fileErrors.length <= 3));
+  // stays the focal point. Initial value only; untrack signals intentional
+  // non-reactivity once the user toggles their preference.
+  let errorsExpanded = $state(false);
+  let errorsInitialized = false;
+  $effect(() => {
+    if (errorsInitialized) return;
+    if (payload === null) return;
+    errorsExpanded = untrack(() => fileErrors.length > 0 && fileErrors.length <= 3);
+    errorsInitialized = true;
+  });
 
-  // Polling: while the sync is running, re-fetch page data every few seconds
-  // so the badge transitions to idle / error without a manual refresh. $effect
-  // cleans up the interval automatically when syncing transitions away.
+  // Live-poll the API while a sync is running so the status badge transitions
+  // to idle/error without manual refresh. Replaces the old invalidateAll on
+  // the server-loaded page; here it just re-fires the same fetch.
   $effect(() => {
     if (!isSyncing) return;
     const id = setInterval(() => {
-      void invalidateAll();
+      void loadProject();
     }, 4000);
     return () => {
       clearInterval(id);
@@ -80,43 +156,16 @@
     return `v${String(versionNumber)}`;
   }
 
-  // Constructs the GitHub web-editor URL for a file. Lets owners jump
-  // straight from a sync error to "fix it here" without hunting through
-  // their repo.
   function githubEditUrl(repoUrl: string, branch: string, path: string): string {
     const base = repoUrl.endsWith("/") ? repoUrl.slice(0, -1) : repoUrl;
     const encodedPath = path.split("/").map(encodeURIComponent).join("/");
     return `${base}/edit/${encodeURIComponent(branch)}/${encodedPath}`;
   }
 
-  // Builds the canonical public doco URL: /{org}/{project}/{path-from-root}.
-  // Strips the configured subpath prefix and the .md extension so the URL
-  // matches the spec in docs/frontmatter-format.md. Pre-alpha: the public
-  // render route doesn't exist yet, so this 404s for now — that's intentional,
-  // it'll resolve once the public viewer ships.
-  function docoUrl(
-    orgSlug: string,
-    projectSlug: string,
-    pathInSource: string,
-    subpath: string | null,
-  ): string {
-    let path = pathInSource;
-    if (subpath !== null && subpath.length > 0) {
-      const trimmed = subpath.endsWith("/") ? subpath.slice(0, -1) : subpath;
-      if (path.startsWith(`${trimmed}/`)) {
-        path = path.slice(trimmed.length + 1);
-      }
-    }
-    if (path.toLowerCase().endsWith(".md")) {
-      path = path.slice(0, -3);
-    }
-    return localizeHref(`/${orgSlug}/${projectSlug}/${path}`);
+  function docoUrl(pathInSource: string, subpath: string | null): string {
+    return localizeHref(`/${orgSlug}/${projectSlug}/${pathFromSourcePath(pathInSource, subpath)}`);
   }
 
-  // Extracts the Zod issue list from a frontmatter_invalid error's details.
-  // Returns null when the details don't have that shape (other error codes
-  // store different payloads). Defensive narrowing because errorDetails is
-  // jsonb (unknown at the type level).
   function extractIssues(details: unknown): PromptIssue[] | null {
     if (typeof details !== "object" || details === null) return null;
     const obj = details as Record<string, unknown>;
@@ -133,8 +182,6 @@
     return out.length > 0 ? out : null;
   }
 
-  // Maps sync_file_errors.error_code to a human-readable explanation.
-  // Falls through to a generic "Sync error." for codes we haven't named.
   function friendlyErrorMessage(code: string): string {
     switch (code) {
       case "yaml_parse_error":
@@ -156,9 +203,6 @@
     }
   }
 
-  // The AI prompts are built in TS (not i18n) and are always English with a
-  // "respond in {user_language}" preamble. See $lib/sync/ai-prompt for why.
-
   let copiedPath = $state<string | null>(null);
   async function copyAiPrompt(
     filePath: string,
@@ -173,9 +217,6 @@
     }, 2000);
   }
 
-  // "Copy all" variant: one prompt that names every file's error and asks
-  // the AI to address them in turn. Useful when several files broke from
-  // the same root cause (e.g. a frontmatter template change).
   let copiedAll = $state(false);
   async function copyAllAiPrompt(): Promise<void> {
     const text = buildAllErrorsPrompt(
@@ -196,130 +237,169 @@
 
 <svelte:head>
   <title>
-    {project.displayName ?? project.slug} · {data.org.slug} · {m.dashboard_meta_title()}
+    {(project?.displayName ?? projectSlug) + " · " + orgSlug + " · " + m.dashboard_meta_title()}
   </title>
   <meta name="robots" content="noindex" />
 </svelte:head>
 
 <div class="mx-auto max-w-4xl">
-  <!-- Project header. Slug (mono) + mode badge top row; display name as h1. -->
+  <!-- Title block: breadcrumb + mode badge always render in the same row.
+       Title is the project's displayName when loaded, skeleton bar otherwise
+       so the h1 height and the spacing below it never shift. -->
   <div class="mb-10">
     <div class="flex flex-wrap items-center gap-3">
       <span class="text-muted-foreground/80 font-mono text-sm">
-        {data.org.slug}/{project.slug}
+        {orgSlug}/{projectSlug}
       </span>
-      <span
-        class="text-muted-foreground border-border inline-flex shrink-0 items-center gap-1.5 border px-2 py-0.5 font-mono text-[10px] tracking-tight uppercase"
-      >
-        {#if isGit}
-          <GitBranch class="size-3" />
-          {m.dashboard_project_badge_git()}
-        {:else}
-          <FilePen class="size-3" />
-          {m.dashboard_project_badge_native()}
-        {/if}
-      </span>
+      {#if project}
+        <span
+          class="text-muted-foreground border-border inline-flex shrink-0 items-center gap-1.5 border px-2 py-0.5 font-mono text-[10px] tracking-tight uppercase"
+        >
+          {#if isGit}
+            <GitBranch class="size-3" />
+            {m.dashboard_project_badge_git()}
+          {:else}
+            <FilePen class="size-3" />
+            {m.dashboard_project_badge_native()}
+          {/if}
+        </span>
+      {/if}
     </div>
-    <h1 class="text-foreground mt-4 text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
-      {project.displayName ?? project.slug}
-    </h1>
+    {#if project}
+      <h1
+        class="text-foreground mt-4 text-3xl font-semibold tracking-tight text-balance sm:text-4xl"
+      >
+        {project.displayName ?? project.slug}
+      </h1>
+    {:else if loadError === null}
+      <!-- h-9 matches text-3xl line-height (36px), sm:h-10 matches text-4xl
+           (40px). Skeleton width approximates a typical displayName. -->
+      <div class="bg-muted mt-4 h-9 w-56 animate-pulse sm:h-10 sm:w-64"></div>
+    {/if}
   </div>
 
-  <!-- Source meta (git only): repo URL, subpath, default branch, sync state.
-       Border + tint switch to destructive when the most recent sync failed,
-       so the error state is visible from the page outline. -->
-  {#if isGit && gitSource}
+  {#if loadError !== null}
+    <div
+      class="border-destructive/40 bg-destructive/5 mb-8 flex items-center justify-between gap-4 border p-4"
+    >
+      <p class="text-destructive text-sm">{m.dashboard_load_error()}</p>
+      <Button type="button" variant="outline" size="sm" onclick={() => void loadProject()}>
+        {m.dashboard_load_error_retry()}
+      </Button>
+    </div>
+  {/if}
+
+  <!-- SOURCE section is always rendered during loading (we assume git, the
+       common case) and only suppressed once the loaded payload says native.
+       Eyebrow + section-spacing stay constant; only the inner meta block
+       transitions from skeleton to real, so the Docos heading below doesn't
+       shift vertically. -->
+  {#if project === null || isGit}
     <section class="mb-12">
       <h2 class="text-muted-foreground mb-3 font-mono text-xs tracking-[0.18em] uppercase">
         {m.dashboard_project_source_heading()}
       </h2>
-      <div
-        class="flex flex-col gap-3 border p-5 transition-colors {isError
-          ? 'border-destructive/40 bg-destructive/5'
-          : 'border-foreground/15'}"
-      >
-        <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
-          <span class="text-muted-foreground">{m.dashboard_project_source_repo_label()}</span>
-          <a
-            href={gitSource.repoUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            class="text-foreground hover:text-primary group inline-flex items-baseline gap-1 font-mono transition-colors"
-          >
-            <span>{gitSource.repoUrl.replace("https://", "")}</span>
-            <ExternalLink class="size-3 self-center" />
-          </a>
-        </div>
-        <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
-          <span class="text-muted-foreground">{m.dashboard_project_source_branch_label()}</span>
-          <span class="text-foreground font-mono">{gitSource.defaultBranch}</span>
-        </div>
-        {#if gitSource.subpath}
+      {#if gitSource}
+        <div
+          class="flex flex-col gap-3 border p-5 transition-colors {isError
+            ? 'border-destructive/40 bg-destructive/5'
+            : 'border-foreground/15'}"
+        >
           <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
-            <span class="text-muted-foreground">
-              {m.dashboard_project_source_subpath_label()}
-            </span>
-            <span class="text-foreground font-mono">{gitSource.subpath}</span>
-          </div>
-        {/if}
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-          <span class="text-muted-foreground">{m.dashboard_project_source_synced_label()}</span>
-          {#if isError}
-            <span class="text-destructive font-medium">
-              {m.dashboard_project_sync_status_error()}
-            </span>
-          {:else if isSyncing}
-            <span class="text-foreground inline-flex items-center gap-2">
-              <RefreshCw class="size-3.5 animate-spin" />
-              {isFirstSync
-                ? m.dashboard_project_sync_status_syncing_first()
-                : m.dashboard_project_sync_status_syncing()}
-            </span>
-          {:else if gitSource.lastSyncedAt}
-            <span
-              class="text-foreground"
-              title={dateFormatter.format(new Date(gitSource.lastSyncedAt))}
+            <span class="text-muted-foreground">{m.dashboard_project_source_repo_label()}</span>
+            <a
+              href={gitSource.repoUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-foreground hover:text-primary group inline-flex items-baseline gap-1 font-mono transition-colors"
             >
-              {m.dashboard_project_sync_status_synced_relative({
-                when: relativeTime(gitSource.lastSyncedAt),
-              })}
-            </span>
-          {:else}
-            <span class="text-muted-foreground italic">
-              {m.dashboard_project_sync_status_never()}
-            </span>
+              <span>{gitSource.repoUrl.replace("https://", "")}</span>
+              <ExternalLink class="size-3 self-center" />
+            </a>
+          </div>
+          <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+            <span class="text-muted-foreground">{m.dashboard_project_source_branch_label()}</span>
+            <span class="text-foreground font-mono">{gitSource.defaultBranch}</span>
+          </div>
+          {#if gitSource.subpath}
+            <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+              <span class="text-muted-foreground">
+                {m.dashboard_project_source_subpath_label()}
+              </span>
+              <span class="text-foreground font-mono">{gitSource.subpath}</span>
+            </div>
           {/if}
-          {#if !isSyncing}
-            <!-- Hide the trigger button while a sync is in flight. The inline
-                 "Syncing now" indicator on the left already carries the
-                 visual state; a second spinner is redundant. -->
-            <form method="POST" action="?/resync" use:enhance class="ml-auto inline-flex">
-              <Button
-                type="submit"
-                variant="ghost"
-                size="icon"
-                class="size-8 cursor-pointer"
-                aria-label={m.dashboard_project_sync_resync_aria()}
+          <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+            <span class="text-muted-foreground">{m.dashboard_project_source_synced_label()}</span>
+            {#if isError}
+              <span class="text-destructive font-medium">
+                {m.dashboard_project_sync_status_error()}
+              </span>
+            {:else if isSyncing}
+              <span class="text-foreground inline-flex items-center gap-2">
+                <RefreshCw class="size-3.5 animate-spin" />
+                {isFirstSync
+                  ? m.dashboard_project_sync_status_syncing_first()
+                  : m.dashboard_project_sync_status_syncing()}
+              </span>
+            {:else if gitSource.lastSyncedAt}
+              <span
+                class="text-foreground"
+                title={dateFormatter.format(new Date(gitSource.lastSyncedAt))}
               >
-                <RefreshCw class="size-4" />
-              </Button>
-            </form>
+                {m.dashboard_project_sync_status_synced_relative({
+                  when: relativeTime(gitSource.lastSyncedAt),
+                })}
+              </span>
+            {:else}
+              <span class="text-muted-foreground italic">
+                {m.dashboard_project_sync_status_never()}
+              </span>
+            {/if}
+            {#if !isSyncing}
+              <form
+                method="POST"
+                action="?/resync"
+                use:enhance={() =>
+                  async ({ update }) => {
+                    await update();
+                    // Pick up the new syncing state immediately; polling takes
+                    // over from there until status leaves "syncing".
+                    await loadProject();
+                  }}
+                class="ml-auto inline-flex"
+              >
+                <Button
+                  type="submit"
+                  variant="ghost"
+                  size="icon"
+                  class="size-8 cursor-pointer"
+                  aria-label={m.dashboard_project_sync_resync_aria()}
+                >
+                  <RefreshCw class="size-4" />
+                </Button>
+              </form>
+            {/if}
+          </div>
+          {#if isError && gitSource.syncError}
+            <div class="border-destructive/30 mt-1 border-t pt-3 text-sm">
+              <span class="text-muted-foreground">
+                {m.dashboard_project_sync_status_error_label()}:
+              </span>
+              <span class="text-foreground ml-2">{gitSource.syncError}</span>
+            </div>
           {/if}
         </div>
-        {#if isError && gitSource.syncError}
-          <div class="border-destructive/30 mt-1 border-t pt-3 text-sm">
-            <span class="text-muted-foreground">
-              {m.dashboard_project_sync_status_error_label()}:
-            </span>
-            <span class="text-foreground ml-2">{gitSource.syncError}</span>
-          </div>
-        {/if}
-      </div>
+      {:else if loadError === null}
+        <!-- Skeleton meta block. h-[150px] approximates the real meta's
+             height: 4 rows (repo, branch, subpath, last-synced) ~120px +
+             p-5 padding (40px) = ~160px. Tuned slightly under so projects
+             without a subpath (3 rows) don't shrink-shift after load. -->
+        <div class="border-foreground/15 bg-muted h-[150px] animate-pulse border"></div>
+      {/if}
     </section>
   {/if}
 
-  <!-- Per-file errors. Only renders when there are unresolved errors from the
-       most recent sync; clears automatically when the next sync succeeds. -->
   {#if isGit && gitSource && fileErrors.length > 0}
     <section class="border-destructive/40 bg-destructive/5 mb-12 border">
       <div class="flex items-center gap-3 px-5 py-4">
@@ -425,30 +505,26 @@
     </section>
   {/if}
 
-  <!-- Docos section. Renders the live list when there are published versions,
-       otherwise picks an empty-state variant based on whether the project has
-       synced and whether every eligible file errored out. -->
+  <!-- Docos heading always renders so the section anchor doesn't shift when
+       payload lands. Below it: real list when there are docos, empty state
+       when payload has 0 docos, skeleton rows during loading. -->
   <section>
     <h2 class="text-foreground mb-6 text-xl font-semibold tracking-tight sm:text-2xl">
       {m.dashboard_project_docos_heading()}
     </h2>
 
-    {#if docos.length > 0}
-      <!-- Dense single-line rows. Whole row is the click target (link to the
-           public doco URL); title + kind on the left, type/status/badge
-           pushed right. Optimized for scanning a long list rather than
-           admiring a short one. -->
+    {#if payload && docos.length > 0}
       <ul class="border-foreground/15 divide-foreground/10 flex flex-col divide-y border">
         {#each docos as doco (doco.id)}
           {@const href =
             doco.pathInSource !== null
-              ? docoUrl(data.org.slug, project.slug, doco.pathInSource, gitSource?.subpath ?? null)
+              ? docoUrl(doco.pathInSource, gitSource?.subpath ?? null)
               : null}
           <li class:opacity-60={doco.deletedAt !== null}>
             {#if href !== null}
               <a
                 {href}
-                class="group hover:bg-muted/30 flex items-center gap-3 px-4 py-2.5 transition-colors"
+                class="group hover:bg-muted flex items-center gap-3 px-4 py-2.5 transition-colors"
               >
                 <div class="min-w-0 flex-1">
                   <div class="text-foreground truncate font-medium">{doco.title}</div>
@@ -479,9 +555,9 @@
           </li>
         {/each}
       </ul>
-    {:else}
+    {:else if payload}
       <div
-        class="border-foreground/10 bg-muted/30 flex flex-col items-center border px-6 py-12 text-center"
+        class="border-foreground/10 bg-muted flex flex-col items-center border px-6 py-12 text-center"
       >
         <p class="text-muted-foreground mb-3 font-mono text-xs tracking-[0.18em] uppercase">
           {m.dashboard_project_docos_empty_eyebrow()}
@@ -514,6 +590,16 @@
           </p>
         {/if}
       </div>
+    {:else if loadError === null}
+      <!-- Skeleton rows. h-12 matches a typical real row: py-2.5 + title +
+           kind subtext = ~48px. Three rows = common-case shape. With more
+           real rows the list grows downward; with fewer it shrinks slightly
+           (rare). -->
+      <ul class="border-foreground/15 divide-foreground/10 flex flex-col divide-y border">
+        <li class="bg-muted h-12 animate-pulse"></li>
+        <li class="bg-muted h-12 animate-pulse"></li>
+        <li class="bg-muted h-12 animate-pulse"></li>
+      </ul>
     {/if}
   </section>
 </div>

@@ -5,6 +5,7 @@
   import { localizeHref } from "$paraglide/runtime";
   import Inbox from "@lucide/svelte/icons/inbox";
   import CheckCheck from "@lucide/svelte/icons/check-check";
+  import { session } from "$lib/client/session.svelte";
 
   let { children }: { children: Snippet } = $props();
 
@@ -26,7 +27,7 @@
       >
         <Inbox class="size-4" />
         <span>{m.inbox_nav_inbox()}</span>
-        {#if page.data.inboxUnreadCount > 0 && !isInbox}
+        {#if session.value.inboxUnreadCount > 0 && !isInbox}
           <span class="bg-primary ml-auto size-2 rounded-full" aria-hidden="true"></span>
         {/if}
       </a>

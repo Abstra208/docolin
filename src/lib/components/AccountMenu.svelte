@@ -1,19 +1,28 @@
 <script lang="ts">
-  import { page } from "$app/state";
   import { m } from "$paraglide/messages";
   import { localizeHref } from "$paraglide/runtime";
   import { Button } from "$lib/components/ui/button";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
+  import { session } from "$lib/client/session.svelte";
 
   // Tri-state account control shared between marketing and dashboard navbars.
   //  - signed in + onboarded → handle dropdown (Dashboard, Sign out)
   //  - WorkOS-authed but not onboarded → "Finish setup" CTA
   //  - anonymous → "Sign in" CTA
+  //
+  // Reads from the client-side session store so the surrounding HTML stays
+  // identical for every reader and can be edge-cached. Until the store
+  // resolves (`loaded === false`) we render nothing rather than flashing an
+  // anonymous CTA at signed-in users.
 </script>
 
-{#if page.data.dbUser}
-  {@const dbUser = page.data.dbUser}
+{#if !session.loaded}
+  <!-- Width reservation is handled by the navbar's auth slot wrapper, so the
+       AccountMenu renders nothing here during loading. Anything visible would
+       just fight with the slot's min-width and risk visual jitter. -->
+{:else if session.value.dbUser}
+  {@const dbUser = session.value.dbUser}
   <DropdownMenu.Root>
     <DropdownMenu.Trigger>
       {#snippet child({ props })}
@@ -26,9 +35,9 @@
     <DropdownMenu.Content align="end" class="min-w-56" preventScroll={false}>
       <DropdownMenu.Label class="flex flex-col gap-0.5 py-2">
         <span class="font-mono text-sm font-medium">@{dbUser.handle}</span>
-        {#if page.data.auth?.email}
+        {#if session.value.auth?.email}
           <span class="text-muted-foreground text-xs font-normal">
-            {page.data.auth.email}
+            {session.value.auth.email}
           </span>
         {/if}
       </DropdownMenu.Label>
@@ -59,7 +68,7 @@
       </DropdownMenu.Item>
     </DropdownMenu.Content>
   </DropdownMenu.Root>
-{:else if page.data.auth}
+{:else if session.value.auth}
   <Button href={localizeHref("/onboarding")} size="sm" variant="outline" class="h-9">
     {m.nav_finish_setup()}
   </Button>

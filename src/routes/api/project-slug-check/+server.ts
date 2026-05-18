@@ -13,9 +13,14 @@ import { checkProjectSlugAvailability } from "$lib/reserved-handles";
 // Caller passes ?org={orgSlug}&h={projectSlug}. Auth is required (user must
 // be a member of the org); we 404 otherwise so non-members can't probe org
 // existence.
-export const GET: RequestHandler = async ({ url, locals }) => {
+export const GET: RequestHandler = async ({ url, locals, setHeaders }) => {
   const userId = locals.dbUser?.id;
   if (!userId) error(404);
+
+  // Auth-gated and membership-scoped: a shared edge cache would leak project-
+  // existence across orgs. Per-user no-store keeps the response off every
+  // shared cache.
+  setHeaders({ "cache-control": "private, no-store" });
 
   const orgSlug = url.searchParams.get("org") ?? "";
   const raw = url.searchParams.get("h") ?? "";

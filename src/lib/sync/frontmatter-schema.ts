@@ -131,7 +131,7 @@ const docolinBlock = z
 
 // YAML parses bare ISO-date strings into JavaScript Date objects (YAML 1.1
 // timestamp resolution). The author wrote a string; we want a string.
-// Union with explicit transform on the Date branch — z.preprocess turned out
+// Union with explicit transform on the Date branch, z.preprocess turned out
 // to be unreliable when chained with .optional() at the top level.
 const dateField = z
   .union([z.string(), z.date().transform((d) => d.toISOString().slice(0, 10))])

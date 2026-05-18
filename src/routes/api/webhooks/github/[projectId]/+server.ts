@@ -15,7 +15,7 @@ import { syncProject } from "$lib/sync/run";
 // `git_sources.webhook_secret_hash` and uses it as the HMAC key.
 //
 // Projects without a configured webhook (webhook_secret_hash IS NULL) reject
-// with 404 — webhooks are an opt-in power-user feature on top of hourly polling.
+// with 404, webhooks are an opt-in power-user feature on top of hourly polling.
 
 export const POST: RequestHandler = async ({ request, params, platform }) => {
   const projectId = params.projectId;
@@ -32,7 +32,7 @@ export const POST: RequestHandler = async ({ request, params, platform }) => {
 
   if (source.length === 0 || source[0].webhookSecretHash === null) {
     // 404 (not 401) so probes can't distinguish "no webhook configured" from
-    // "bad signature" — both look like missing endpoints.
+    // "bad signature", both look like missing endpoints.
     error(404, "webhook not configured");
   }
 

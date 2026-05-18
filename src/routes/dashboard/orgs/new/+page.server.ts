@@ -10,12 +10,14 @@ import { provisionOrg } from "$lib/server/onboarding";
 
 const MAX_DISPLAY_NAME = 64;
 
-// Layout guard ensures dbUser exists, but the load function exists so
-// PageData carries the user's handle for the breadcrumb / suggestions.
-export const load: PageServerLoad = ({ locals }) => {
-  return {
-    yourHandle: locals.dbUser?.handle ?? "",
-  };
+// Edge-cacheable shell. The form is static (the user's handle, if needed for
+// any UI affordance, is available via the client-side session store), and
+// the create action runs server-side on submit.
+export const load: PageServerLoad = ({ setHeaders }) => {
+  setHeaders({
+    "cache-control": "public, max-age=300, s-maxage=2592000, stale-while-revalidate=604800",
+  });
+  return {};
 };
 
 // Build a short human-readable UID for a claim. Prefix `clm-` + first 12 hex

@@ -13,6 +13,8 @@ import {
   type ProcessFileContext,
   type ProcessFileResult,
 } from "./process-file";
+import { pathFromSourcePath, publicLatestUrls } from "$lib/doco-urls";
+import { purgeCacheUrls } from "./cache-purge";
 
 // Top-level sync orchestrator. Invoked by the cron handler, the webhook
 // receiver, and the project-create flow's waitUntil. Loads the project's git
@@ -169,8 +171,18 @@ async function runInitialSync(ctx: ModeBase): Promise<SyncRunResult> {
   });
 
   const versionTag = await resolveTagForSha(ctx.owner, ctx.repo, resolvedSha);
-  const counts = await processFiles(eligible, [], [], ctx, resolvedSha, versionTag, globalSitemap);
-  return await markIdle(ctx.gitSourceId, resolvedSha, counts);
+  const { counts, changedPaths } = await processFiles(
+    eligible,
+    [],
+    [],
+    ctx,
+    resolvedSha,
+    versionTag,
+    globalSitemap,
+  );
+  const result = await markIdle(ctx.gitSourceId, resolvedSha, counts);
+  await purgeChangedDocos(ctx, changedPaths);
+  return result;
 }
 
 async function runIncrementalSync(ctx: ModeBase & { base: string }): Promise<SyncRunResult> {
@@ -289,7 +301,7 @@ async function runIncrementalSync(ctx: ModeBase & { base: string }): Promise<Syn
   });
 
   const versionTag = await resolveTagForSha(ctx.owner, ctx.repo, resolvedSha);
-  const counts = await processFiles(
+  const { counts, changedPaths } = await processFiles(
     toProcess,
     toRename,
     toDelete,
@@ -299,7 +311,13 @@ async function runIncrementalSync(ctx: ModeBase & { base: string }): Promise<Syn
     globalSitemap,
   );
   counts.renamed = renameCounts.renamed;
-  return await markIdle(ctx.gitSourceId, resolvedSha, counts);
+  // Renames also invalidate the OLD URL: it used to serve the doco, now it's a
+  // 404 (or whatever replaced it). The new path is already in changedPaths via
+  // toProcess (renames are always paired with a process call in the loop above).
+  const renameOldPaths = toRename.map((r) => r.oldPath);
+  const result = await markIdle(ctx.gitSourceId, resolvedSha, counts);
+  await purgeChangedDocos(ctx, [...changedPaths, ...renameOldPaths]);
+  return result;
 }
 
 // Looks up a tag name pointing at the resolved commit, if one exists. Returns
@@ -327,8 +345,12 @@ async function processFiles(
   resolvedSha: string,
   versionTag: string | null,
   globalSitemap: GlobalSitemapResult,
-): Promise<SyncRunCounts> {
+): Promise<{ counts: SyncRunCounts; changedPaths: string[] }> {
   const counts: SyncRunCounts = { ...ZERO_COUNTS };
+  // Source paths whose latest URL is now stale. Drives the cache purge. Errored
+  // files are excluded (no new version was published, so the cached HTML still
+  // matches what's in the DB).
+  const changedPaths: string[] = [];
 
   const fileCtx: ProcessFileContext = {
     bucket: ctx.bucket,
@@ -345,7 +367,8 @@ async function processFiles(
 
   for (const path of toProcess) {
     const result = await processFile(path, fileCtx);
-    await applyFileResult(ctx.projectId, path, result, counts);
+    const published = await applyFileResult(ctx.projectId, path, result, counts);
+    if (published) changedPaths.push(path);
   }
 
   for (const path of toDelete) {
@@ -353,10 +376,11 @@ async function processFiles(
     if (result.status === "deleted") {
       counts.deleted += 1;
       await clearFileError(ctx.projectId, path);
+      changedPaths.push(path);
     }
   }
 
-  return counts;
+  return { counts, changedPaths };
 }
 
 async function applyFileResult(
@@ -364,7 +388,7 @@ async function applyFileResult(
   filePath: string,
   result: ProcessFileResult,
   counts: SyncRunCounts,
-): Promise<void> {
+): Promise<boolean> {
   if (result.status === "errored") {
     counts.errored += 1;
     await recordFileError(
@@ -374,11 +398,34 @@ async function applyFileResult(
       result.errorMessage,
       result.errorDetails,
     );
-    return;
+    return false;
   }
   if (result.status === "created") counts.created += 1;
   if (result.status === "updated") counts.updated += 1;
   await clearFileError(projectId, filePath);
+  return true;
+}
+
+// ---------- cache invalidation ----------
+
+// Translate source paths into latest-URL purge targets and fire the CF purge.
+// Best-effort: the underlying call swallows network / API failures so a flaky
+// purge can't crash a successful sync (the doco viewer's stale-while-revalidate
+// covers any missed invalidation).
+async function purgeChangedDocos(ctx: ModeBase, changedPaths: string[]): Promise<void> {
+  if (changedPaths.length === 0) return;
+  const urls: string[] = [];
+  for (const sourcePath of changedPaths) {
+    const pathFromProjectRoot = pathFromSourcePath(sourcePath, ctx.subpath);
+    for (const url of publicLatestUrls({
+      orgSlug: ctx.orgSlug,
+      projectSlug: ctx.projectSlug,
+      pathFromProjectRoot,
+    })) {
+      urls.push(url);
+    }
+  }
+  await purgeCacheUrls(urls);
 }
 
 // ---------- error surface ----------

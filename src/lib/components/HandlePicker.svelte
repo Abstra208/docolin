@@ -30,7 +30,7 @@
     availableHint,
     id = "handle",
     name = "handle",
-    prefix = "docolin.dev/",
+    prefix = "docolin.com/",
     placeholder = "yourhandle",
     maxlength = 30,
     required = true,

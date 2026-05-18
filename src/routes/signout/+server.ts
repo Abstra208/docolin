@@ -11,9 +11,13 @@ export const GET: RequestHandler = async ({ locals, url }) => {
   const returnTo = new URL("/", url.origin).toString();
   const { logoutUrl, headers } = await authService.signOut(locals.auth.sessionId, { returnTo });
 
+  // Session-clearing redirect, per-user, must never be cached or replayed.
   const response = new Response(null, {
     status: 302,
-    headers: { Location: logoutUrl },
+    headers: {
+      Location: logoutUrl,
+      "Cache-Control": "private, no-store",
+    },
   });
 
   const setCookie = headers?.["Set-Cookie"] ?? headers?.["set-cookie"];

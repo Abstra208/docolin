@@ -1,6 +1,6 @@
 // Parse a GitHub repo URL into its owner + repo components. Accepts the
 // HTTPS form (with or without .git suffix and trailing slash) and the SSH
-// form. No regex per CLAUDE.md 3.8 — pure string operations.
+// form. No regex per CLAUDE.md 3.8, pure string operations.
 //
 // Lives in $lib/git/ since other adapters (gitlab, codeberg, etc.) will
 // follow the same shape when we add them.

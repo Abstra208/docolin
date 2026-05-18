@@ -42,13 +42,16 @@ function deriveDisplayName(
   return "";
 }
 
-export const load: PageServerLoad = ({ locals, url }) => {
+export const load: PageServerLoad = ({ locals, url, setHeaders }) => {
   if (!locals.auth.user) {
     redirect(302, localizeHref(`/signin?returnTo=/onboarding${url.search}`));
   }
   if (locals.dbUser) {
     redirect(302, url.searchParams.get("returnTo") ?? localizeHref("/"));
   }
+  // Suggested handle / displayName come from the WorkOS user record; per-user
+  // and one-time. Never cache.
+  setHeaders({ "cache-control": "private, no-store" });
   return {
     suggestedHandle: deriveHandleFromEmail(locals.auth.user.email),
     suggestedDisplayName: deriveDisplayName(

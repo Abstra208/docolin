@@ -14,18 +14,12 @@ declare global {
       dbUser: DbUser | null;
       personalOrg: DbOrg | null;
     }
-    // Shape exposed to the client by +layout.server.ts. Lives in PageData so
-    // shared components like the navbar can read `page.data.auth` /
-    // `page.data.dbUser` with full typing.
-    interface PageData {
-      auth: { email: string } | null;
-      dbUser: {
-        handle: string;
-        displayName: string | null;
-        isPlatformAdmin: boolean;
-      } | null;
-      inboxUnreadCount: number;
-    }
+    // Per-user state (auth, dbUser, inbox count) is intentionally NOT in
+    // PageData: it would force every page that includes the navbar to be
+    // session-bound and uncacheable. Instead it lives in the client-side
+    // store at $lib/client/session.svelte.ts, fetched from /api/session
+    // after hydration. The HTML stays identical for every reader and can
+    // be edge-cached.
     // interface PageState {}
 
     // Cloudflare bindings + runtime exposed by adapter-cloudflare via

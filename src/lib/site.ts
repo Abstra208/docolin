@@ -2,7 +2,7 @@
 // Keep this small and stable; everything user-facing lives in i18n messages.
 
 export const SITE_NAME = "docolin";
-export const SITE_URL = "https://docolin.dev";
+export const SITE_URL = "https://docolin.com";
 export const SITE_REPO = "https://github.com/docolin-dev/docolin";
 export const SITE_REPO_OWNER = "docolin-dev";
 export const SITE_REPO_NAME = "docolin";

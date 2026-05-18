@@ -7,9 +7,14 @@ export const GET: RequestHandler = async ({ url }) => {
     returnPathname,
   });
 
+  // PKCE cookie is set here and the location URL is one-shot, scoped to this
+  // user's flow. Never cache anywhere along the chain.
   const response = new Response(null, {
     status: 302,
-    headers: { Location: authorizationUrl },
+    headers: {
+      Location: authorizationUrl,
+      "Cache-Control": "private, no-store",
+    },
   });
 
   const setCookie = headers?.["Set-Cookie"] ?? headers?.["set-cookie"];

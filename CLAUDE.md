@@ -20,6 +20,7 @@ Design goals:
 
 - **Privacy-first.** docolin should be the docs platform people can trust, including users who don't want to be tracked. Collect the minimum needed, default to anonymous, opt-in third-party integrations, no fingerprinting. See 1.7 for what this means in code.
 - **Run lean.** Designed to run on free-tier infrastructure for as long as possible. It keeps the project sustainable for a solo maintainer and forces clean architecture. See 1.8 for what this means in code.
+- **Cache-first architecture.** Every response is designed to be edge-cacheable, even private pages. The HTML for a given URL is a static shell, identical for every reader; per-user data (auth state, notifications, inbox lists, settings) loads after hydration from `private, no-store` API endpoints. Admin and moderator surfaces are the only exception (small audience, not worth the refactor). Versioned / immutable URLs get `max-age` forever; mutable-but-cacheable URLs get long `s-maxage` plus purge on write.
 
 Stack & conventions:
 

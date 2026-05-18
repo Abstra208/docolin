@@ -12,6 +12,7 @@ import {
 } from "$lib/server/db/schema";
 import { fromLtree } from "$lib/server/db/schema/types";
 import { renderMarkdown, extractDocoToc } from "$lib/server/markdown";
+import { pathFromSourcePath, rebuildPathInSource } from "$lib/doco-urls";
 
 // Public doco viewer. URL shape per docs/frontmatter-format.md:
 //   /{org-or-user}/{project}/{path-from-project-root}
@@ -20,9 +21,23 @@ import { renderMarkdown, extractDocoToc } from "$lib/server/markdown";
 // the file's original `path_in_source` (subpath prefix + path + .md) and
 // look it up against the doco identity row.
 
-export const load: PageServerLoad = async ({ params }) => {
+// Cache policy. The HTML is session-independent (the navbar's per-user widgets
+// hydrate from /api/session client-side, see CLAUDE.md "Cache-first arch"), so
+// the response is safe to share across all readers. Two URL shapes:
+//   - Versioned (`...@{sha-or-versionNumber}`): bytes for that exact ref never
+//     change. Browser + edge cache forever, no revalidation.
+//   - Latest: browser always revalidates (max-age=0) so authors see their own
+//     push instantly; the edge caches for a day, then keeps serving stale for
+//     a week while it refreshes in the background. Active CF cache-purge on
+//     sync (see $lib/sync/cache-purge) accelerates the happy path so the next
+//     reader hits a fresh function invocation right after publish. SWR is the
+//     safety net for purge failures.
+const CACHE_VERSIONED = "public, max-age=31536000, immutable";
+const CACHE_LATEST = "public, max-age=0, s-maxage=86400, stale-while-revalidate=604800";
+
+export const load: PageServerLoad = async ({ params, setHeaders }) => {
   // Find project + source for the (org, project) URL pair. Native projects
-  // have no git_source row — handled as 404 for v1 since native rendering
+  // have no git_source row, handled as 404 for v1 since native rendering
   // isn't built yet.
   const projectRows = await db
     .select({
@@ -47,6 +62,10 @@ export const load: PageServerLoad = async ({ params }) => {
   // Truncated SHAs are allowed as long as exactly one version matches.
   const { pathPart, versionRef } = parseVersionRef(params.path);
   const expectedPathInSource = rebuildPathInSource(pathPart, proj.subpath);
+
+  setHeaders({
+    "cache-control": versionRef === null ? CACHE_LATEST : CACHE_VERSIONED,
+  });
 
   // Resolve the doco identity row up front so the version filter can scope
   // commit-SHA prefix matching to a single doco's history. Without this scope,
@@ -137,21 +156,8 @@ export const load: PageServerLoad = async ({ params }) => {
     .where(eq(versions.docoId, doco.docoId))
     .orderBy(desc(versions.versionNumber));
 
-  // Compute path-from-project-root by stripping the subpath prefix and the
-  // .md extension. Used for the versioned-URL form in the dropdown.
-  const trimmedSubpath =
-    proj.subpath === null || proj.subpath.length === 0
-      ? ""
-      : proj.subpath.endsWith("/")
-        ? proj.subpath.slice(0, -1)
-        : proj.subpath;
-  let pathFromProjectRoot = doco.pathInSource ?? "";
-  if (trimmedSubpath.length > 0 && pathFromProjectRoot.startsWith(`${trimmedSubpath}/`)) {
-    pathFromProjectRoot = pathFromProjectRoot.slice(trimmedSubpath.length + 1);
-  }
-  if (pathFromProjectRoot.toLowerCase().endsWith(".md")) {
-    pathFromProjectRoot = pathFromProjectRoot.slice(0, -3);
-  }
+  // Compute path-from-project-root for the versioned-URL form in the dropdown.
+  const pathFromProjectRoot = pathFromSourcePath(doco.pathInSource ?? "", proj.subpath);
 
   const bodyHtml = await renderMarkdown(doco.bodyText);
   const toc = extractDocoToc(doco.bodyText);
@@ -338,20 +344,7 @@ async function lookupNavTarget(
   const target = rows[0];
   if (target.pathInSource === null) return null;
 
-  const trimmedSubpath =
-    ctx.subpath === null || ctx.subpath.length === 0
-      ? ""
-      : ctx.subpath.endsWith("/")
-        ? ctx.subpath.slice(0, -1)
-        : ctx.subpath;
-  let pathFromRoot: string = target.pathInSource;
-  if (trimmedSubpath.length > 0 && pathFromRoot.startsWith(`${trimmedSubpath}/`)) {
-    pathFromRoot = pathFromRoot.slice(trimmedSubpath.length + 1);
-  }
-  if (pathFromRoot.toLowerCase().endsWith(".md")) {
-    pathFromRoot = pathFromRoot.slice(0, -3);
-  }
-
+  const pathFromRoot = pathFromSourcePath(target.pathInSource, ctx.subpath);
   return {
     kind: "resolved",
     title: target.title,
@@ -418,18 +411,4 @@ function isAllHexLower(s: string): boolean {
     if (!isDigit && !isHexLetter) return false;
   }
   return true;
-}
-
-// URL `path` → original path_in_source.
-//   subpath = "docs", path = "frontmatter-format" → "docs/frontmatter-format.md"
-//   subpath = null,   path = "guides/install"    → "guides/install.md"
-function rebuildPathInSource(urlPath: string, subpath: string | null): string {
-  const trimmedSubpath =
-    subpath === null || subpath.length === 0
-      ? ""
-      : subpath.endsWith("/")
-        ? subpath.slice(0, -1)
-        : subpath;
-  const base = trimmedSubpath.length > 0 ? `${trimmedSubpath}/${urlPath}` : urlPath;
-  return `${base}.md`;
 }

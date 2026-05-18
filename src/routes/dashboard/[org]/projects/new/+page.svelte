@@ -1,5 +1,6 @@
 <script lang="ts">
   import { enhance } from "$app/forms";
+  import { page } from "$app/state";
   import { m } from "$paraglide/messages";
   import { localizeHref } from "$paraglide/runtime";
   import { Button } from "$lib/components/ui/button";
@@ -12,7 +13,10 @@
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
   import type { PageProps } from "./$types";
 
-  let { data, form }: PageProps = $props();
+  let { form }: PageProps = $props();
+  // Org slug is in the URL; pull it straight from page params instead of a
+  // server load so the page itself can be edge-cached as a static shell.
+  const orgSlug = $derived(page.params.org ?? "");
 
   // Form action's union type confuses eslint inference; this read-through-
   // unknown helper preserves the prior value of a field across failed
@@ -217,12 +221,12 @@
         bind:isChecking={slugChecking}
         id="projectSlug"
         name="slug"
-        checkUrl="/api/project-slug-check?org={encodeURIComponent(data.org.slug)}"
+        checkUrl="/api/project-slug-check?org={encodeURIComponent(orgSlug)}"
         reasonToMessage={projectSlugMessage}
         idleHint={m.dashboard_new_project_slug_hint_idle()}
         checkingHint={m.dashboard_new_project_slug_hint_checking()}
         availableHint={m.dashboard_new_project_slug_hint_available()}
-        prefix="docolin.dev/{data.org.slug}/"
+        prefix="docolin.com/{orgSlug}/"
         placeholder="my-docs"
         ariaLabel={m.dashboard_new_project_slug_label()}
       />
@@ -291,7 +295,7 @@
         {/if}
       </Button>
       <Button
-        href={localizeHref(`/dashboard/${data.org.slug}`)}
+        href={localizeHref(`/dashboard/${orgSlug}`)}
         variant="ghost"
         size="lg"
         class="h-11 cursor-pointer px-5 text-base"

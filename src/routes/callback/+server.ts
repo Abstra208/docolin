@@ -23,9 +23,13 @@ export const GET: RequestHandler = async ({ request, url }) => {
       ? result.returnPathname
       : `/onboarding?returnTo=${encodeURIComponent(result.returnPathname)}`;
 
+    // OAuth code is single-use and the session cookie is per-user. Never cache.
     const response = new Response(null, {
       status: 302,
-      headers: { Location: location },
+      headers: {
+        Location: location,
+        "Cache-Control": "private, no-store",
+      },
     });
 
     const setCookie = result.headers?.["Set-Cookie"] ?? result.headers?.["set-cookie"];
@@ -40,7 +44,10 @@ export const GET: RequestHandler = async ({ request, url }) => {
     if (err instanceof OAuthStateMismatchError || err instanceof PKCECookieMissingError) {
       return new Response(null, {
         status: 302,
-        headers: { Location: "/signin?error=state_mismatch" },
+        headers: {
+          Location: "/signin?error=state_mismatch",
+          "Cache-Control": "private, no-store",
+        },
       });
     }
     throw err;

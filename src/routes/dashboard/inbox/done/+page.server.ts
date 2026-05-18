@@ -1,46 +1,16 @@
-import { error, fail } from "@sveltejs/kit";
-import { and, desc, eq, isNotNull } from "drizzle-orm";
+import { fail } from "@sveltejs/kit";
+import { and, eq } from "drizzle-orm";
 import type { Actions, PageServerLoad } from "./$types";
 import { db } from "$lib/server/db";
 import { inboxMessages } from "$lib/server/db/schema";
 
-// Done bucket: messages the user explicitly marked done. Read state on
-// these doesn't matter for the view (everything in done is also read in
-// practice, since you have to open a message to mark it done).
-export const load: PageServerLoad = async ({ locals, setHeaders }) => {
-  const userId = locals.dbUser?.id;
-  if (!userId) error(404);
-
-  setHeaders({ "cache-control": "private, no-store" });
-
-  const rows = await db
-    .select({
-      id: inboxMessages.id,
-      kind: inboxMessages.kind,
-      subject: inboxMessages.subject,
-      preview: inboxMessages.preview,
-      linkUrl: inboxMessages.linkUrl,
-      readAt: inboxMessages.readAt,
-      doneAt: inboxMessages.doneAt,
-      createdAt: inboxMessages.createdAt,
-    })
-    .from(inboxMessages)
-    .where(and(eq(inboxMessages.userId, userId), isNotNull(inboxMessages.doneAt)))
-    .orderBy(desc(inboxMessages.doneAt))
-    .limit(100);
-
-  return {
-    bucket: "done" as const,
-    messages: rows.map((r) => ({
-      id: r.id,
-      kind: r.kind,
-      subject: r.subject,
-      preview: r.preview,
-      hasLink: r.linkUrl !== null,
-      readAt: r.readAt?.toISOString() ?? null,
-      createdAt: r.createdAt.toISOString(),
-    })),
-  };
+// Shell for the done bucket. Messages load client-side from /api/dashboard/
+// inbox?bucket=done. markUndone action stays here for the per-row form.
+export const load: PageServerLoad = ({ setHeaders }) => {
+  setHeaders({
+    "cache-control": "public, max-age=300, s-maxage=2592000, stale-while-revalidate=604800",
+  });
+  return {};
 };
 
 // Inline "move back to inbox" from a Done row. Clears doneAt; the row drops

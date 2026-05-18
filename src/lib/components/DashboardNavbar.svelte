@@ -1,14 +1,17 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { m } from "$paraglide/messages";
   import { localizeHref } from "$paraglide/runtime";
+  import Search from "@lucide/svelte/icons/search";
   import AccountMenu from "$lib/components/AccountMenu.svelte";
   import InboxBell from "$lib/components/InboxBell.svelte";
   import LanguageSwitcher from "$lib/components/LanguageSwitcher.svelte";
 
   // Breadcrumb-style top bar for /dashboard/* routes. Different chrome from
   // the marketing navbar so the user knows they're in admin mode. Logo +
-  // breadcrumb left, language + account right. No scroll morph, no center
-  // nav links, no footer (this is an admin surface).
+  // breadcrumb left, search in the middle, language + auth slot right.
+  // Search mirrors the doco-viewer chrome so signed-in users see one search
+  // surface across reading and managing.
   //
   // Per the dashboard spec's design pass: segments are derived from the URL
   // path. The deepest segment renders as plain text (you're here); earlier
@@ -20,7 +23,7 @@
 <header
   class="border-foreground/10 bg-background/85 fixed top-0 right-0 left-0 z-40 border-b backdrop-blur-md"
 >
-  <nav class="flex items-center justify-between gap-4 px-4 py-2.5 sm:px-6">
+  <nav class="relative flex items-center justify-between gap-4 px-4 py-2.5 sm:px-6">
     <!-- Breadcrumb: wide screens show the full chain; narrow screens collapse
          intermediate segments to a "..." link back to the parent so the
          deepest segment stays visible without horizontal overflow.
@@ -79,12 +82,38 @@
       </div>
     </div>
 
-    <div class="flex shrink-0 items-center gap-1.5">
-      <div class="hidden sm:block">
+    <!-- Center: search + language as one "discovery" cluster. Mirrors the
+         doco-viewer chrome (see DocoViewerNavbar) so signed-in users see
+         the same controls in the same place across reading and managing.
+         pointer-events handling lets clicks pass through the empty gutter
+         to the breadcrumb / auth slot. -->
+    <div class="pointer-events-none absolute inset-x-0 hidden items-center justify-center md:flex">
+      <div class="pointer-events-auto flex w-full max-w-md items-center gap-2">
+        <!-- h-9 + border-input + bg-transparent match the LanguageSwitcher's
+             Select.Trigger so the two read as one cohesive control bar. -->
+        <button
+          type="button"
+          class="border-input inline-flex h-9 flex-1 cursor-not-allowed items-center gap-2 border bg-transparent px-3 text-sm"
+          aria-label={m.home_hero_search_label()}
+          disabled
+        >
+          <Search class="text-muted-foreground size-4" />
+          <span class="text-muted-foreground">{m.home_hero_search_placeholder()}</span>
+        </button>
         <LanguageSwitcher />
       </div>
-      <InboxBell />
-      <AccountMenu />
+    </div>
+
+    <!-- Right: auth slot only. min-h-9 reserves the height of the eventual
+         buttons even when the slot is empty during loading, so the navbar
+         doesn't grow vertically when content lands. min-w-48 reserves the
+         worst-case [bell + handle] width; anon's narrower "Sign in" right-
+         aligns inside it so the right edge stays even. -->
+    <div class="flex shrink-0 items-center gap-1.5">
+      <div class="flex min-h-9 min-w-48 items-center justify-end gap-1.5">
+        <InboxBell />
+        <AccountMenu />
+      </div>
     </div>
   </nav>
 </header>

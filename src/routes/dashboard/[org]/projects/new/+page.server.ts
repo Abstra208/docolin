@@ -1,4 +1,4 @@
-import { error, fail, redirect } from "@sveltejs/kit";
+import { fail, redirect } from "@sveltejs/kit";
 import { and, eq } from "drizzle-orm";
 import { env } from "$env/dynamic/private";
 import { localizeHref } from "$paraglide/runtime";
@@ -12,27 +12,14 @@ import { syncProject } from "$lib/sync/run";
 const MAX_DISPLAY_NAME = 64;
 const MAX_SUBPATH = 200;
 
-export const load: PageServerLoad = async ({ locals, params }) => {
-  const userId = locals.dbUser?.id;
-  if (!userId) error(404);
-
-  // Verify membership inline so non-members get a 404, not a 403 (avoids
-  // probing org existence).
-  const orgRows = await db
-    .select({ id: orgs.id, slug: orgs.slug, displayName: orgs.displayName })
-    .from(orgs)
-    .innerJoin(orgMembers, and(eq(orgMembers.orgId, orgs.id), eq(orgMembers.userId, userId)))
-    .where(eq(orgs.slug, params.org))
-    .limit(1);
-  if (orgRows.length === 0) error(404);
-  const org = orgRows[0];
-
-  return {
-    org: {
-      slug: org.slug,
-      displayName: org.displayName,
-    },
-  };
+// Edge-cacheable shell. Membership is re-verified inside the create action
+// (defense in depth); the page UI uses the org slug from the URL params and
+// doesn't need server-loaded org info. One cached HTML per org slug.
+export const load: PageServerLoad = ({ setHeaders }) => {
+  setHeaders({
+    "cache-control": "public, max-age=300, s-maxage=2592000, stale-while-revalidate=604800",
+  });
+  return {};
 };
 
 interface GithubRepoCheckOk {

@@ -22,7 +22,7 @@ describe("isLinkShaped", () => {
     });
 
     it("mailto URLs", () => {
-      expect(isLinkShaped("mailto:support@docolin.dev")).toBe(true);
+      expect(isLinkShaped("mailto:support@docolin.com")).toBe(true);
     });
 
     it("tolerates leading and trailing whitespace", () => {

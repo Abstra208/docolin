@@ -1,11 +1,33 @@
 <script lang="ts">
   import "./layout.css";
   import type { Snippet } from "svelte";
+  import { onMount } from "svelte";
   import { page } from "$app/state";
   import { baseLocale, deLocalizeUrl, localizeUrl, locales } from "$paraglide/runtime";
   import { SITE_URL } from "$lib/site";
+  import { refreshSession } from "$lib/client/session.svelte";
+  // ?url asks Vite for the asset's final hashed URL string. The latin range
+  // covers EN + DE traffic (umlauts and ß live in U+0000-00FF); the ext and
+  // cyrillic ranges fetch lazily on demand. Preloading only the latin file
+  // keeps the critical-path payload minimal.
+  import geistLatinUrl from "@fontsource-variable/geist/files/geist-latin-wght-normal.woff2?url";
 
   let { children }: { children: Snippet } = $props();
+
+  // Session lives client-side so public HTML can be edge-cached without
+  // baking a reader's identity into the response. Kick off the first fetch
+  // on mount; refetch when the tab regains visibility so a signin / signout
+  // in another tab propagates without a full reload.
+  onMount(() => {
+    void refreshSession();
+    const onVisibility = (): void => {
+      if (document.visibilityState === "visible") void refreshSession();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  });
 
   // Build localized canonical URLs for each locale of the current path so
   // search engines can index every language variant of every page.
@@ -22,6 +44,12 @@
 </script>
 
 <svelte:head>
+  <!-- High-priority font preload so the browser starts fetching Geist before
+       any layout/paint work, eliminating the visible width shift when text
+       falls back to the system font and then swaps. Combined with the
+       `font-display: block` in layout.css the result is no FOUT. -->
+  <link rel="preload" href={geistLatinUrl} as="font" type="font/woff2" crossorigin="anonymous" />
+
   <link rel="canonical" href={canonical} />
   {#each altLinks as link (link.loc)}
     <link rel="alternate" hreflang={link.loc} href={link.href} />
