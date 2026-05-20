@@ -1,5 +1,16 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  type AnyPgColumn,
+  boolean,
+  check,
+  index,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { docos, versions } from "./docos";
 import { users } from "./users";
 
@@ -14,11 +25,24 @@ export const discussions = pgTable(
     docoId: uuid("doco_id")
       .notNull()
       .references(() => docos.id, { onDelete: "cascade" }),
+    // Per-doco sequential number (the #N in the URL, GitHub-issue style).
+    // Assigned from docos.discussion_seq at creation; stable across title edits
+    // and other discussions being deleted. Unique within a doco.
+    number: integer("number").notNull(),
     versionId: uuid("version_id").references(() => versions.id, { onDelete: "set null" }),
     title: text("title").notNull(),
     bodyText: text("body_text").notNull(),
     bodyFormat: text("body_format").notNull().default("commonmark").$type<"commonmark">(),
     status: text("status").notNull().default("open").$type<"open" | "closed" | "resolved">(),
+    // Pinned threads sort to the top of a doco's discussion list. Moderator
+    // action; null = not pinned.
+    pinnedAt: timestamp("pinned_at", { withTimezone: true }),
+    // The reply marked as the accepted answer (Q&A). Set by the thread author
+    // or a moderator; cleared if that reply is deleted. Forward ref because
+    // discussion_replies is defined below in this same module.
+    answeredReplyId: uuid("answered_reply_id").references((): AnyPgColumn => discussionReplies.id, {
+      onDelete: "set null",
+    }),
     hiddenAt: timestamp("hidden_at", { withTimezone: true }),
     hiddenByUserId: uuid("hidden_by_user_id").references(() => users.id, {
       onDelete: "set null",
@@ -39,6 +63,9 @@ export const discussions = pgTable(
   },
   (t) => [
     index("discussions_doco_idx").on(t.docoId),
+    uniqueIndex("discussions_doco_number_unique").on(t.docoId, t.number),
+    // Backs the per-doco list query (ordered by recent activity).
+    index("discussions_doco_activity_idx").on(t.docoId, t.updatedAt.desc()),
     index("discussions_status_idx").on(t.status),
     index("discussions_created_by_idx").on(t.createdByUserId),
     index("discussions_hidden_idx").on(t.hiddenAt),

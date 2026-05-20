@@ -1,0 +1,651 @@
+import { and, asc, count, desc, eq, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
+import { db } from "$lib/server/db";
+import {
+  discussionEdits,
+  discussionReplies,
+  discussionReplyEdits,
+  discussions,
+  docos,
+  inboxMessages,
+  users,
+} from "$lib/server/db/schema";
+import { renderMarkdown } from "$lib/server/markdown";
+
+// Data + mutation layer for doco discussions. Discussions are GitHub-issues
+// for a doco: a titled thread opened by a user, with a flat (never nested)
+// reply timeline. Reads here are public and fed into edge-cached load
+// functions; writes happen through form actions that purge the cache and
+// fan out inbox notifications afterwards.
+
+export type DiscussionStatus = "open" | "closed" | "resolved";
+
+// Visibility for public reads. Content is hidden when hiddenAt is set, unless
+// an embargo window (hiddenUntil) has already elapsed, in which case the hide
+// auto-reverses. Redacted content is gone for good. Mirrors the column
+// semantics documented in schema/discussions.ts.
+function discussionIsVisible(): SQL | undefined {
+  return and(
+    eq(discussions.isRedacted, false),
+    or(
+      isNull(discussions.hiddenAt),
+      sql`${discussions.hiddenUntil} is not null and ${discussions.hiddenUntil} <= now()`,
+    ),
+  );
+}
+
+// Same rule applied in JS for reply rows, which we fetch in full (including
+// hidden ones) so the timeline can render a neutral "removed" placeholder in
+// place rather than silently dropping a reply and breaking the conversation.
+function replyRowIsVisible(r: {
+  isRedacted: boolean;
+  hiddenAt: Date | null;
+  hiddenUntil: Date | null;
+}): boolean {
+  if (r.isRedacted) return false;
+  if (r.hiddenAt === null) return true;
+  return r.hiddenUntil !== null && r.hiddenUntil.getTime() <= Date.now();
+}
+
+// Moderation gate. Platform admins moderate everything; the owning org's admin
+// moderates its docos. Author-of-the-thread powers are checked separately at
+// the call sites (the author can edit / change status on their own thread).
+// Extension point: honor org/repo roles that grant a moderation permission
+// (schema/roles.ts) once a permission-string convention is established.
+export function canModerateDiscussion(args: {
+  user: { id: string; isPlatformAdmin: boolean } | null;
+  ownerOrgAdminUserId: string;
+}): boolean {
+  if (args.user === null) return false;
+  if (args.user.isPlatformAdmin) return true;
+  return args.user.id === args.ownerOrgAdminUserId;
+}
+
+export interface ThreadListItem {
+  id: string;
+  number: number;
+  title: string;
+  status: DiscussionStatus;
+  isPinned: boolean;
+  isAnswered: boolean;
+  authorHandle: string;
+  authorDisplayName: string | null;
+  replyCount: number;
+  lastActivityAt: string;
+}
+
+// Cap on the per-doco list. At pre-alpha volume this is plenty; a "load more"
+// page is the follow-up if a doco ever outgrows it. Bounds the query (no
+// unbounded fetch) the same way the inbox list caps at 100.
+const THREAD_LIST_LIMIT = 100;
+
+// Filter for the list tabs: "open", "closed" (which means not-open, i.e. both
+// closed and resolved), or "all".
+export type ThreadFilter = "open" | "closed" | "all";
+
+// Per-doco thread list: pinned first, then most recent activity. Hidden /
+// redacted threads are filtered out; reply counts include visible replies only.
+// updatedAt is bumped on every reply / edit / status change, so it tracks
+// activity without a max(reply) aggregate.
+export async function listThreads(docoId: string, filter: ThreadFilter): Promise<ThreadListItem[]> {
+  const conds = [eq(discussions.docoId, docoId), discussionIsVisible()];
+  if (filter === "open") conds.push(eq(discussions.status, "open"));
+  else if (filter === "closed") conds.push(inArray(discussions.status, ["closed", "resolved"]));
+
+  const rows = await db
+    .select({
+      id: discussions.id,
+      number: discussions.number,
+      title: discussions.title,
+      status: discussions.status,
+      pinnedAt: discussions.pinnedAt,
+      answeredReplyId: discussions.answeredReplyId,
+      updatedAt: discussions.updatedAt,
+      authorHandle: users.handle,
+      authorDisplayName: users.displayName,
+    })
+    .from(discussions)
+    .innerJoin(users, eq(users.id, discussions.createdByUserId))
+    .where(and(...conds))
+    .orderBy(sql`${discussions.pinnedAt} desc nulls last`, desc(discussions.updatedAt))
+    .limit(THREAD_LIST_LIMIT);
+
+  const ids = rows.map((r) => r.id);
+  const counts = new Map<string, number>();
+  if (ids.length > 0) {
+    const aggRows = await db
+      .select({ discussionId: discussionReplies.discussionId, c: count() })
+      .from(discussionReplies)
+      .where(
+        and(
+          inArray(discussionReplies.discussionId, ids),
+          eq(discussionReplies.isRedacted, false),
+          or(
+            isNull(discussionReplies.hiddenAt),
+            sql`${discussionReplies.hiddenUntil} is not null and ${discussionReplies.hiddenUntil} <= now()`,
+          ),
+        ),
+      )
+      .groupBy(discussionReplies.discussionId);
+    for (const a of aggRows) counts.set(a.discussionId, a.c);
+  }
+
+  return rows.map((r) => ({
+    id: r.id,
+    number: r.number,
+    title: r.title,
+    status: r.status,
+    isPinned: r.pinnedAt !== null,
+    isAnswered: r.answeredReplyId !== null,
+    authorHandle: r.authorHandle,
+    authorDisplayName: r.authorDisplayName,
+    replyCount: counts.get(r.id) ?? 0,
+    lastActivityAt: r.updatedAt.toISOString(),
+  }));
+}
+
+export interface ThreadPost {
+  id: string;
+  authorHandle: string;
+  authorDisplayName: string | null;
+  bodyHtml: string;
+  // Raw markdown source, so the author's inline edit form can prefill with the
+  // original text. Public content (same as the rendered body), so exposing it
+  // is fine. Empty on removed-placeholder rows.
+  bodySource: string;
+  createdAt: string;
+  isEdited: boolean;
+}
+
+export interface ThreadReply extends ThreadPost {
+  // True when this reply is by the thread's original author (a quiet "author"
+  // marker, like GitHub). False on removed-placeholder rows.
+  isOpAuthor: boolean;
+  // True when this reply is the thread's accepted answer.
+  isAnswer: boolean;
+  // When true, the reply was hidden / redacted: body and author are blanked
+  // and the UI renders a "this content was removed" placeholder in its slot.
+  removed: boolean;
+}
+
+export interface ThreadDetail {
+  id: string;
+  number: number;
+  title: string;
+  status: DiscussionStatus;
+  isPinned: boolean;
+  // Id of the accepted-answer reply, or null. Lets the UI render the "answered"
+  // banner + jump link without scanning replies.
+  answeredReplyId: string | null;
+  op: ThreadPost;
+  replies: ThreadReply[];
+  // True when the reply list was capped (more replies exist than were returned).
+  repliesTruncated: boolean;
+}
+
+// Cap on replies returned for a thread. Threads this long are rare in practice;
+// "load more" pagination is the follow-up. Bounds the query.
+const REPLY_LIMIT = 200;
+
+// Full thread for the detail page: the original post plus the flat reply
+// timeline, markdown rendered to sanitized HTML. Looked up by its per-doco
+// number (the #N from the URL), scoped to the doco so a number under the wrong
+// doco path 404s. Returns null when missing or not publicly visible.
+export async function getThread(docoId: string, number: number): Promise<ThreadDetail | null> {
+  const dRows = await db
+    .select({
+      id: discussions.id,
+      number: discussions.number,
+      title: discussions.title,
+      status: discussions.status,
+      pinnedAt: discussions.pinnedAt,
+      answeredReplyId: discussions.answeredReplyId,
+      bodyText: discussions.bodyText,
+      createdAt: discussions.createdAt,
+      createdByUserId: discussions.createdByUserId,
+      authorHandle: users.handle,
+      authorDisplayName: users.displayName,
+    })
+    .from(discussions)
+    .innerJoin(users, eq(users.id, discussions.createdByUserId))
+    .where(
+      and(eq(discussions.docoId, docoId), eq(discussions.number, number), discussionIsVisible()),
+    )
+    .limit(1);
+  if (dRows.length === 0) return null;
+  const d = dRows[0];
+
+  // Fetch one extra to detect overflow, then cap.
+  const rRowsRaw = await db
+    .select({
+      id: discussionReplies.id,
+      bodyText: discussionReplies.bodyText,
+      createdAt: discussionReplies.createdAt,
+      isRedacted: discussionReplies.isRedacted,
+      hiddenAt: discussionReplies.hiddenAt,
+      hiddenUntil: discussionReplies.hiddenUntil,
+      createdByUserId: discussionReplies.createdByUserId,
+      authorHandle: users.handle,
+      authorDisplayName: users.displayName,
+    })
+    .from(discussionReplies)
+    .innerJoin(users, eq(users.id, discussionReplies.createdByUserId))
+    .where(eq(discussionReplies.discussionId, d.id))
+    .orderBy(asc(discussionReplies.createdAt))
+    .limit(REPLY_LIMIT + 1);
+  const repliesTruncated = rRowsRaw.length > REPLY_LIMIT;
+  const rRows = repliesTruncated ? rRowsRaw.slice(0, REPLY_LIMIT) : rRowsRaw;
+
+  // Edit markers: a post is "edited" when at least one history row exists.
+  const opEditedRows = await db
+    .select({ id: discussionEdits.id })
+    .from(discussionEdits)
+    .where(eq(discussionEdits.discussionId, d.id))
+    .limit(1);
+  const visibleReplyIds = rRows.filter(replyRowIsVisible).map((r) => r.id);
+  const editedReplyIds = new Set<string>();
+  if (visibleReplyIds.length > 0) {
+    const editedRows = await db
+      .selectDistinct({ id: discussionReplyEdits.discussionReplyId })
+      .from(discussionReplyEdits)
+      .where(inArray(discussionReplyEdits.discussionReplyId, visibleReplyIds));
+    for (const e of editedRows) editedReplyIds.add(e.id);
+  }
+
+  const replies: ThreadReply[] = await Promise.all(
+    rRows.map(async (r): Promise<ThreadReply> => {
+      if (!replyRowIsVisible(r)) {
+        return {
+          id: r.id,
+          authorHandle: "",
+          authorDisplayName: null,
+          bodyHtml: "",
+          bodySource: "",
+          createdAt: r.createdAt.toISOString(),
+          isEdited: false,
+          isOpAuthor: false,
+          isAnswer: false,
+          removed: true,
+        };
+      }
+      return {
+        id: r.id,
+        authorHandle: r.authorHandle,
+        authorDisplayName: r.authorDisplayName,
+        bodyHtml: await renderMarkdown(r.bodyText),
+        bodySource: r.bodyText,
+        createdAt: r.createdAt.toISOString(),
+        isEdited: editedReplyIds.has(r.id),
+        isOpAuthor: r.createdByUserId === d.createdByUserId,
+        isAnswer: r.id === d.answeredReplyId,
+        removed: false,
+      };
+    }),
+  );
+
+  return {
+    id: d.id,
+    number: d.number,
+    title: d.title,
+    status: d.status,
+    isPinned: d.pinnedAt !== null,
+    answeredReplyId: d.answeredReplyId,
+    op: {
+      id: d.id,
+      authorHandle: d.authorHandle,
+      authorDisplayName: d.authorDisplayName,
+      bodyHtml: await renderMarkdown(d.bodyText),
+      bodySource: d.bodyText,
+      createdAt: d.createdAt.toISOString(),
+      isEdited: opEditedRows.length > 0,
+    },
+    replies,
+    repliesTruncated,
+  };
+}
+
+export type MutationResult = { ok: true } | { ok: false; reason: "not_found" | "forbidden" };
+
+// Creates a discussion with the next per-doco number. The number comes from an
+// atomic increment of docos.discussion_seq (UPDATE ... RETURNING locks the doco
+// row), so concurrent creates can't collide. Wrapped in a transaction so a
+// failed insert doesn't burn a number mid-flight. Returns the id + number for
+// building the new thread's URL.
+export async function createDiscussion(args: {
+  docoId: string;
+  title: string;
+  bodyText: string;
+  userId: string;
+}): Promise<{ id: string; number: number }> {
+  return db.transaction(async (tx) => {
+    const seqRows = await tx
+      .update(docos)
+      .set({ discussionSeq: sql`${docos.discussionSeq} + 1`, updatedAt: new Date() })
+      .where(eq(docos.id, args.docoId))
+      .returning({ number: docos.discussionSeq });
+    const number = seqRows[0].number;
+
+    const rows = await tx
+      .insert(discussions)
+      .values({
+        docoId: args.docoId,
+        number,
+        title: args.title,
+        bodyText: args.bodyText,
+        createdByUserId: args.userId,
+      })
+      .returning({ id: discussions.id });
+    return { id: rows[0].id, number };
+  });
+}
+
+// Resolves a thread's row identity from its per-doco number, for action
+// handlers that need the id (to mutate) plus the number + title (to build the
+// canonical URL for redirects and cache purges). Scoped to the doco.
+export async function getDiscussionRef(
+  docoId: string,
+  number: number,
+): Promise<{ id: string; number: number; title: string } | null> {
+  const rows = await db
+    .select({ id: discussions.id, number: discussions.number, title: discussions.title })
+    .from(discussions)
+    .where(and(eq(discussions.docoId, docoId), eq(discussions.number, number)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export interface EditVersion {
+  editedAt: string;
+  bodyHtml: string;
+}
+
+// Prior versions of a post, newest first, rendered to sanitized HTML. Edit
+// history is public per the moderation policy (it's part of the doco's record;
+// truly sensitive removal goes through redaction, which destroys the original).
+// Returns null when the post isn't publicly visible, so hidden / redacted
+// content's history isn't exposed either. Loaded on demand (only when a reader
+// opens the "edited" history), so it never bloats the thread payload.
+export async function getDiscussionEditHistory(
+  discussionId: string,
+): Promise<EditVersion[] | null> {
+  const vis = await db
+    .select({ id: discussions.id })
+    .from(discussions)
+    .where(and(eq(discussions.id, discussionId), discussionIsVisible()))
+    .limit(1);
+  if (vis.length === 0) return null;
+
+  const rows = await db
+    .select({ priorBodyText: discussionEdits.priorBodyText, editedAt: discussionEdits.editedAt })
+    .from(discussionEdits)
+    .where(eq(discussionEdits.discussionId, discussionId))
+    .orderBy(desc(discussionEdits.editedAt));
+  return Promise.all(
+    rows.map(async (r) => ({
+      editedAt: r.editedAt.toISOString(),
+      bodyHtml: await renderMarkdown(r.priorBodyText),
+    })),
+  );
+}
+
+export async function getReplyEditHistory(replyId: string): Promise<EditVersion[] | null> {
+  const vis = await db
+    .select({
+      isRedacted: discussionReplies.isRedacted,
+      hiddenAt: discussionReplies.hiddenAt,
+      hiddenUntil: discussionReplies.hiddenUntil,
+    })
+    .from(discussionReplies)
+    .where(eq(discussionReplies.id, replyId))
+    .limit(1);
+  if (vis.length === 0 || !replyRowIsVisible(vis[0])) return null;
+
+  const rows = await db
+    .select({
+      priorBodyText: discussionReplyEdits.priorBodyText,
+      editedAt: discussionReplyEdits.editedAt,
+    })
+    .from(discussionReplyEdits)
+    .where(eq(discussionReplyEdits.discussionReplyId, replyId))
+    .orderBy(desc(discussionReplyEdits.editedAt));
+  return Promise.all(
+    rows.map(async (r) => ({
+      editedAt: r.editedAt.toISOString(),
+      bodyHtml: await renderMarkdown(r.priorBodyText),
+    })),
+  );
+}
+
+// Reply to a thread. Allowed on closed / resolved threads too (matching
+// GitHub, where you can still comment after close). Returns null when the
+// thread is missing or not visible. Bumps the thread's updatedAt so activity
+// sorting and cache keys reflect the new reply.
+export async function createReply(args: {
+  discussionId: string;
+  bodyText: string;
+  userId: string;
+}): Promise<{ id: string } | null> {
+  const exists = await db
+    .select({ id: discussions.id })
+    .from(discussions)
+    .where(and(eq(discussions.id, args.discussionId), discussionIsVisible()))
+    .limit(1);
+  if (exists.length === 0) return null;
+
+  const rows = await db
+    .insert(discussionReplies)
+    .values({
+      discussionId: args.discussionId,
+      bodyText: args.bodyText,
+      createdByUserId: args.userId,
+    })
+    .returning({ id: discussionReplies.id });
+  await db
+    .update(discussions)
+    .set({ updatedAt: new Date() })
+    .where(eq(discussions.id, args.discussionId));
+  return { id: rows[0].id };
+}
+
+// Edit the original post. Author only: moderators do not edit other people's
+// content (the admin path for altering someone else's text is privacy
+// redaction, a separate destructive action, per the moderation spec). The
+// prior body is preserved in discussion_edits before the row is overwritten,
+// both inside one transaction. Title is editable but not history-tracked
+// (the edit-history schema only versions the body).
+export async function editDiscussion(args: {
+  discussionId: string;
+  title: string;
+  bodyText: string;
+  userId: string;
+}): Promise<MutationResult> {
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .select({
+        createdByUserId: discussions.createdByUserId,
+        bodyText: discussions.bodyText,
+        bodyFormat: discussions.bodyFormat,
+      })
+      .from(discussions)
+      .where(eq(discussions.id, args.discussionId))
+      .limit(1);
+    if (rows.length === 0) return { ok: false, reason: "not_found" } as const;
+    const cur = rows[0];
+    if (cur.createdByUserId !== args.userId) {
+      return { ok: false, reason: "forbidden" } as const;
+    }
+    await tx.insert(discussionEdits).values({
+      discussionId: args.discussionId,
+      priorBodyText: cur.bodyText,
+      priorBodyFormat: cur.bodyFormat,
+      editedByUserId: args.userId,
+    });
+    await tx
+      .update(discussions)
+      .set({ title: args.title, bodyText: args.bodyText, updatedAt: new Date() })
+      .where(eq(discussions.id, args.discussionId));
+    return { ok: true } as const;
+  });
+}
+
+// Edit a reply. Author only, same as editing the original post.
+export async function editReply(args: {
+  replyId: string;
+  bodyText: string;
+  userId: string;
+}): Promise<MutationResult> {
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .select({
+        createdByUserId: discussionReplies.createdByUserId,
+        bodyText: discussionReplies.bodyText,
+        bodyFormat: discussionReplies.bodyFormat,
+      })
+      .from(discussionReplies)
+      .where(eq(discussionReplies.id, args.replyId))
+      .limit(1);
+    if (rows.length === 0) return { ok: false, reason: "not_found" } as const;
+    const cur = rows[0];
+    if (cur.createdByUserId !== args.userId) {
+      return { ok: false, reason: "forbidden" } as const;
+    }
+    await tx.insert(discussionReplyEdits).values({
+      discussionReplyId: args.replyId,
+      priorBodyText: cur.bodyText,
+      priorBodyFormat: cur.bodyFormat,
+      editedByUserId: args.userId,
+    });
+    await tx
+      .update(discussionReplies)
+      .set({ bodyText: args.bodyText, updatedAt: new Date() })
+      .where(eq(discussionReplies.id, args.replyId));
+    return { ok: true } as const;
+  });
+}
+
+// Close / resolve / reopen. Allowed for the thread author or a moderator.
+export async function setDiscussionStatus(args: {
+  discussionId: string;
+  status: DiscussionStatus;
+  userId: string;
+  canModerate: boolean;
+}): Promise<MutationResult> {
+  const rows = await db
+    .select({ createdByUserId: discussions.createdByUserId })
+    .from(discussions)
+    .where(eq(discussions.id, args.discussionId))
+    .limit(1);
+  if (rows.length === 0) return { ok: false, reason: "not_found" };
+  if (rows[0].createdByUserId !== args.userId && !args.canModerate) {
+    return { ok: false, reason: "forbidden" };
+  }
+  await db
+    .update(discussions)
+    .set({ status: args.status, updatedAt: new Date() })
+    .where(eq(discussions.id, args.discussionId));
+  return { ok: true };
+}
+
+// Mark / unmark the accepted answer (Q&A). Allowed for the thread author or a
+// moderator. `replyId` null clears the answer; otherwise it must be a reply on
+// this thread. Doesn't bump updatedAt: marking an answer isn't new content and
+// shouldn't reorder the list.
+export async function setAnswer(args: {
+  discussionId: string;
+  replyId: string | null;
+  userId: string;
+  canModerate: boolean;
+}): Promise<MutationResult> {
+  const rows = await db
+    .select({ createdByUserId: discussions.createdByUserId })
+    .from(discussions)
+    .where(eq(discussions.id, args.discussionId))
+    .limit(1);
+  if (rows.length === 0) return { ok: false, reason: "not_found" };
+  if (rows[0].createdByUserId !== args.userId && !args.canModerate) {
+    return { ok: false, reason: "forbidden" };
+  }
+  if (args.replyId !== null) {
+    const reply = await db
+      .select({ id: discussionReplies.id })
+      .from(discussionReplies)
+      .where(
+        and(
+          eq(discussionReplies.id, args.replyId),
+          eq(discussionReplies.discussionId, args.discussionId),
+        ),
+      )
+      .limit(1);
+    if (reply.length === 0) return { ok: false, reason: "not_found" };
+  }
+  await db
+    .update(discussions)
+    .set({ answeredReplyId: args.replyId })
+    .where(eq(discussions.id, args.discussionId));
+  return { ok: true };
+}
+
+// Pin / unpin a thread to the top of its doco's list. Moderator only (a doco-
+// curation power, not something the author does to their own thread).
+export async function setPinned(args: {
+  discussionId: string;
+  pinned: boolean;
+  canModerate: boolean;
+}): Promise<MutationResult> {
+  if (!args.canModerate) return { ok: false, reason: "forbidden" };
+  const rows = await db
+    .select({ id: discussions.id })
+    .from(discussions)
+    .where(eq(discussions.id, args.discussionId))
+    .limit(1);
+  if (rows.length === 0) return { ok: false, reason: "not_found" };
+  await db
+    .update(discussions)
+    .set({ pinnedAt: args.pinned ? new Date() : null })
+    .where(eq(discussions.id, args.discussionId));
+  return { ok: true };
+}
+
+// Inbox fan-out for a new reply: notify the thread author and everyone who
+// replied earlier, minus the actor. Plain-text stored copy (matching the
+// claim-notification convention); linkUrl is the raw path, localized at
+// render time. Run via waitUntil so it never blocks the write response.
+export async function notifyNewReply(args: {
+  discussionId: string;
+  threadUrl: string;
+  actorUserId: string;
+}): Promise<void> {
+  const dRows = await db
+    .select({ author: discussions.createdByUserId, title: discussions.title })
+    .from(discussions)
+    .where(eq(discussions.id, args.discussionId))
+    .limit(1);
+  if (dRows.length === 0) return;
+
+  const priorAuthors = await db
+    .selectDistinct({ u: discussionReplies.createdByUserId })
+    .from(discussionReplies)
+    .where(eq(discussionReplies.discussionId, args.discussionId));
+
+  const recipients = new Set<string>([dRows[0].author]);
+  for (const r of priorAuthors) recipients.add(r.u);
+  recipients.delete(args.actorUserId);
+  if (recipients.size === 0) return;
+
+  const bodyMarkdown = `A new reply was posted in this discussion.
+
+:::btn
+[Open the discussion](${args.threadUrl})
+:::`;
+
+  await db.insert(inboxMessages).values(
+    [...recipients].map((userId) => ({
+      userId,
+      kind: "discussion_reply" as const,
+      subject: `New reply: ${dRows[0].title}`,
+      preview: "Someone replied to a discussion you're part of.",
+      bodyMarkdown,
+      linkUrl: args.threadUrl,
+      relatedRecordId: args.discussionId,
+    })),
+  );
+}

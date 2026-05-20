@@ -33,6 +33,11 @@ export const docos = pgTable(
     }),
     pathInSource: text("path_in_source"),
     latestPublishedVersionId: uuid("latest_published_version_id"),
+    // Monotonic counter for assigning per-doco discussion numbers (the #N in
+    // discussion URLs, GitHub-issue style). Incremented atomically when a
+    // discussion is created; only ever grows, so deletes leave gaps, which is
+    // fine. Not the live discussion count.
+    discussionSeq: integer("discussion_seq").notNull().default(0),
     // Set when a synced file is removed from the source repo. Version rows
     // stay; the renderer surfaces this as a "removed from source" badge but
     // the doco URL still resolves. Cleared when the file reappears at the

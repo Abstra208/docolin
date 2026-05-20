@@ -1,0 +1,202 @@
+import { Marked, type Tokens } from "marked";
+import { createDirectives } from "marked-directive";
+import DOMPurify from "isomorphic-dompurify";
+import { slugify } from "$lib/slug";
+
+// Re-exported so existing markdown consumers keep importing slugify from here;
+// the implementation lives in $lib/slug (no markdown deps) so URL helpers can
+// use it without pulling in marked / DOMPurify.
+export { slugify };
+
+// Isomorphic markdown config shared by the server renderer ($lib/server/markdown)
+// and the client-side composer preview. Everything, callouts, links, heading
+// anchors, shiki highlighting, sanitization, is defined once here so the
+// preview is byte-identical to the published doco. The only difference is HOW
+// shiki is loaded: the server imports it statically, while the client preview
+// lazy-imports it (see renderMarkdownPreview) so the heavy highlighter never
+// ships in the initial bundle and never reaches readers, who get
+// server-rendered HTML. Rendering stays off the server (Run Lean) for previews.
+
+// Bump to invalidate every cached rendered page on next read (it changes the
+// cache key); no DB backfill needed. Lives here because both render paths build
+// on this config.
+export const RENDERER_VERSION = "1";
+
+// Sanitizer allowlist additions: directive renderers emit Tailwind classes,
+// the heading renderer emits id="" for TOC anchors, shiki emits inline
+// style="color: ..." on code spans, and the link renderer emits target/rel.
+export const SANITIZE_ADD_ATTR = ["class", "target", "rel", "id", "style"];
+
+// The resets pull the prose plugin's paragraph margins off the first/last
+// children of a callout so its own padding isn't doubled up.
+const CALLOUT_BASE = "border border-l-4 p-4 my-3 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0";
+
+// Names match the Docusaurus / Starlight convention so imported docs render
+// with no rewrite step. info = primary tint, warning = amber,
+// danger = destructive tint, note = neutral, tip = emerald.
+const CALLOUT_CLASSES: Record<string, string> = {
+  info: `border-primary/40 bg-primary/5 ${CALLOUT_BASE}`,
+  warning: `border-amber-500/40 bg-amber-50 ${CALLOUT_BASE}`,
+  danger: `border-destructive/40 bg-destructive/5 ${CALLOUT_BASE}`,
+  note: `border-foreground/15 bg-muted/40 ${CALLOUT_BASE}`,
+  tip: `border-emerald-500/40 bg-emerald-50 ${CALLOUT_BASE}`,
+};
+
+// Applies the isomorphic extensions to a Marked instance: the `:::name` block
+// directives (callouts + btn), the external-link renderer (new tab + noopener),
+// and heading ids for TOC anchoring. Code-block highlighting is intentionally
+// not here, see the file header.
+export function applySharedExtensions(marked: Marked): void {
+  marked.use(
+    createDirectives([
+      {
+        level: "container",
+        marker: ":::",
+        renderer(token) {
+          // marked-directive exposes meta.name (the directive identifier) and
+          // tokens (parsed children). Only narrowing here, not asserting,
+          // because the package's types are loose around custom directives.
+          const t = token as Tokens.Generic & {
+            meta?: { name?: string };
+            tokens?: Tokens.Generic[];
+          };
+          const name = t.meta?.name ?? "";
+          const inner = this.parser.parse(t.tokens ?? []);
+
+          if (name === "btn") {
+            // Strip the wrapping <p> the inner [link](url) becomes so the
+            // anchor renders as a standalone button without an extra block.
+            const linkOnly = inner.replace(/^<p>\s*/, "").replace(/\s*<\/p>\s*$/, "");
+            return `<div class="my-4">${linkOnly.replace(
+              /^<a /,
+              '<a class="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex h-11 items-center gap-2 px-5 text-base font-medium no-underline transition-colors" ',
+            )}</div>`;
+          }
+
+          if (name in CALLOUT_CLASSES) {
+            return `<div class="${CALLOUT_CLASSES[name]}">${inner}</div>`;
+          }
+
+          return false;
+        },
+      },
+    ]),
+  );
+
+  // External destinations (mailto, http, https, anything not starting with "/"
+  // or "#") open in a new tab with noopener; internal links keep same-tab nav.
+  // Heading ids match extractDocoToc's slugs so anchors line up.
+  marked.use({
+    renderer: {
+      link({ href, title, tokens }) {
+        const text = this.parser.parseInline(tokens);
+        const titleAttr = title ? ` title="${title}"` : "";
+        const isInternal = href.startsWith("/") || href.startsWith("#");
+        const externalAttrs = isInternal ? "" : ' target="_blank" rel="noopener noreferrer"';
+        return `<a href="${href}"${titleAttr}${externalAttrs}>${text}</a>`;
+      },
+      heading({ tokens, depth }) {
+        const inner = this.parser.parseInline(tokens);
+        const plain = plainTextFromTokens(tokens);
+        const id = slugify(plain);
+        return `<h${String(depth)} id="${id}">${inner}</h${String(depth)}>\n`;
+      },
+    },
+  });
+
+  marked.use({ gfm: true, breaks: false });
+}
+
+// Sanitizes rendered HTML with the shared allowlist. One sanitize step for both
+// render paths so the security surface is identical.
+export function sanitizeHtml(raw: string): string {
+  return DOMPurify.sanitize(raw, { ADD_ATTR: SANITIZE_ADD_ATTR });
+}
+
+// Shiki integration, parameterized by the highlighter so the server can pass a
+// statically-imported codeToHtml and the client a lazily-imported one. The
+// canonical marked v18 async pattern: do the await in walkTokens, stash the
+// result on the token, read it back in a sync code renderer (an async renderer
+// yields "[object Promise]"). github-light matches the light-only theme;
+// unknown grammars fall back to a plain escaped block.
+export type ShikiHighlighter = (
+  code: string,
+  options: { lang: string; theme: string },
+) => Promise<string>;
+
+interface ShikiCachedToken extends Tokens.Code {
+  shikiHtml?: string;
+}
+
+function escapeForPre(text: string): string {
+  return text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+export function applyShikiHighlighting(marked: Marked, codeToHtml: ShikiHighlighter): void {
+  marked.use({
+    async: true,
+    async walkTokens(token) {
+      if (token.type !== "code") return;
+      const t = token as ShikiCachedToken;
+      const lang = t.lang === undefined || t.lang === "" ? "text" : t.lang;
+      try {
+        t.shikiHtml = await codeToHtml(t.text, { lang, theme: "github-light" });
+      } catch {
+        t.shikiHtml = `<pre><code>${escapeForPre(t.text)}</code></pre>`;
+      }
+    },
+    renderer: {
+      code(token) {
+        const t = token as ShikiCachedToken;
+        if (typeof t.shikiHtml === "string") return t.shikiHtml;
+        return `<pre><code>${escapeForPre(t.text)}</code></pre>`;
+      },
+    },
+  });
+  marked.setOptions({ async: true });
+}
+
+// Lazily-built singleton for client-side preview rendering.
+let previewMarked: Marked | null = null;
+
+// Live preview render for the composer, run on the client. Lazy-imports shiki
+// on first use so the highlighter is a separate on-demand chunk, off the
+// initial bundle and never sent to readers. Uses the exact same shared config +
+// shiki + theme as the server, so the preview matches the published doco.
+//
+// Tradeoff: shiki's default bundle is sizeable. It's lazy (only when a writer
+// opens Preview), cached after first load, and off the read path, so the weight
+// only ever hits authors, once. A fine-grained shiki bundle is the follow-up if
+// that chunk needs trimming.
+export async function renderMarkdownPreview(source: string): Promise<string> {
+  if (previewMarked === null) {
+    const { codeToHtml } = await import("shiki");
+    const marked = new Marked();
+    applySharedExtensions(marked);
+    applyShikiHighlighting(marked, codeToHtml);
+    previewMarked = marked;
+  }
+  const raw = await previewMarked.parse(source, { async: true });
+  return sanitizeHtml(raw);
+}
+
+// Flattens inline tokens to plain text. Used for heading ids (no markup in the
+// id) and TOC labels (reader-visible text, not source syntax).
+//
+// Parameter is `unknown` rather than marked's `Tokens.Generic[]` because
+// Generic has a `[key:string]: any` index signature that pollutes downstream
+// inference with any. Narrowing locally keeps the rest of the file type-safe.
+export function plainTextFromTokens(tokens: unknown): string {
+  if (!Array.isArray(tokens)) return "";
+  let out = "";
+  for (const t of tokens) {
+    if (typeof t !== "object" || t === null) continue;
+    const obj = t as Record<string, unknown>;
+    if (Array.isArray(obj.tokens)) {
+      out += plainTextFromTokens(obj.tokens);
+      continue;
+    }
+    if (typeof obj.text === "string") out += obj.text;
+  }
+  return out;
+}

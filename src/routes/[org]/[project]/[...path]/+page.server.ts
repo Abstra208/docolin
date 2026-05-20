@@ -2,16 +2,10 @@ import { error } from "@sveltejs/kit";
 import { and, desc, eq, inArray, like } from "drizzle-orm";
 import type { PageServerLoad } from "./$types";
 import { db } from "$lib/server/db";
-import {
-  docos as docosTable,
-  gitSources,
-  orgs,
-  projects,
-  users,
-  versions,
-} from "$lib/server/db/schema";
+import { docos as docosTable, users, versions } from "$lib/server/db/schema";
 import { fromLtree } from "$lib/server/db/schema/types";
 import { renderMarkdown, extractDocoToc } from "$lib/server/markdown";
+import { resolveDocoIdentity, resolveProjectBySlug } from "$lib/server/doco-resolve";
 import { pathFromSourcePath, rebuildPathInSource } from "$lib/doco-urls";
 
 // Public doco viewer. URL shape per docs/frontmatter-format.md:
@@ -48,28 +42,8 @@ export const load: PageServerLoad = async ({ params, setHeaders, isDataRequest }
   // Find project + source for the (org, project) URL pair. Native projects
   // have no git_source row, handled as 404 for v1 since native rendering
   // isn't built yet.
-  const projectRows = await db
-    .select({
-      orgSlug: orgs.slug,
-      orgDisplayName: orgs.displayName,
-      projectId: projects.id,
-      projectSlug: projects.slug,
-      projectDisplayName: projects.displayName,
-      gitSourceId: gitSources.id,
-      subpath: gitSources.subpath,
-      // Needed by the viewer to build the "Edit on GitHub" and "Discussions"
-      // links. Both are git-host conventions, so they only render for
-      // git-backed projects; for native (when it ships) these will be null.
-      repoUrl: gitSources.repoUrl,
-      defaultBranch: gitSources.defaultBranch,
-    })
-    .from(projects)
-    .innerJoin(orgs, eq(orgs.id, projects.ownerOrgId))
-    .innerJoin(gitSources, eq(gitSources.projectId, projects.id))
-    .where(and(eq(orgs.slug, params.org), eq(projects.slug, params.project)))
-    .limit(1);
-  if (projectRows.length === 0) error(404);
-  const proj = projectRows[0];
+  const proj = await resolveProjectBySlug(params.org, params.project);
+  if (proj === null) error(404);
 
   // Optional @-suffix selects a specific version: `path@123` for a numeric
   // versionNumber, `path@abc1234` (4+ hex chars) for a commit SHA prefix.
@@ -88,23 +62,8 @@ export const load: PageServerLoad = async ({ params, setHeaders, isDataRequest }
   // Resolve the doco identity row up front so the version filter can scope
   // commit-SHA prefix matching to a single doco's history. Without this scope,
   // a short prefix could collide across the project.
-  const docoIdentity = await db
-    .select({
-      docoId: docosTable.id,
-      pathInSource: docosTable.pathInSource,
-      deletedAt: docosTable.deletedAt,
-      latestPublishedVersionId: docosTable.latestPublishedVersionId,
-    })
-    .from(docosTable)
-    .where(
-      and(
-        eq(docosTable.gitSourceId, proj.gitSourceId),
-        eq(docosTable.pathInSource, expectedPathInSource),
-      ),
-    )
-    .limit(1);
-  if (docoIdentity.length === 0) error(404);
-  const docoIdRow = docoIdentity[0];
+  const docoIdRow = await resolveDocoIdentity(proj.gitSourceId, expectedPathInSource);
+  if (docoIdRow === null) error(404);
 
   // latestPublishedVersionId is nullable in the schema but always set after
   // a successful sync; treat missing as a 404 rather than failing the query.

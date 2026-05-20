@@ -1,5 +1,6 @@
 import { baseLocale, locales } from "$paraglide/runtime";
 import { SITE_URL } from "$lib/site";
+import { slugify } from "$lib/slug";
 
 // Shared mapping between a doco's `path_in_source` (filesystem path inside the
 // git repo) and its public URL `path-from-project-root`. The viewer needs the
@@ -52,6 +53,49 @@ export function publicLatestUrls(args: {
     urls.push(
       `${SITE_URL}${prefix}/${args.orgSlug}/${args.projectSlug}/${args.pathFromProjectRoot}`,
     );
+  }
+  return urls;
+}
+
+// Canonical URL ref for a discussion: "{number}-{title-slug}", or just the
+// number when the title has no sluggable characters. The number is what the
+// route resolves on; the slug is SEO sugar (regenerated from the title, stale
+// slugs 301 to this canonical form).
+export function discussionRef(number: number, title: string): string {
+  const slug = slugify(title);
+  return slug.length > 0 ? `${String(number)}-${slug}` : String(number);
+}
+
+// Parses the leading integer of a discussion URL ref ("12-some-slug" -> 12).
+// Returns null when there's no leading positive integer. No regex (CLAUDE.md 3.8).
+export function parseDiscussionNumber(ref: string): number | null {
+  let digits = "";
+  for (const c of ref) {
+    if (c >= "0" && c <= "9") digits += c;
+    else break;
+  }
+  if (digits.length === 0) return null;
+  const n = Number.parseInt(digits, 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+// Public discussion URLs across every locale, for cache purging after a
+// discussion write. `ref` omitted purges the per-doco thread list; supplied
+// (the canonical "{number}-{slug}") purges the single thread page. The
+// discussion routes are cached like the doco viewer (public, mutable), so
+// writes purge them on the same best-effort basis as a sync.
+export function discussionUrls(args: {
+  orgSlug: string;
+  projectSlug: string;
+  pathFromProjectRoot: string;
+  ref?: string;
+}): string[] {
+  const base = `${args.orgSlug}/${args.projectSlug}/${args.pathFromProjectRoot}/discussions`;
+  const suffix = args.ref === undefined ? "" : `/${args.ref}`;
+  const urls: string[] = [];
+  for (const loc of locales) {
+    const prefix = loc === baseLocale ? "" : `/${loc}`;
+    urls.push(`${SITE_URL}${prefix}/${base}${suffix}`);
   }
   return urls;
 }

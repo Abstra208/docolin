@@ -85,6 +85,20 @@
       "when": 1779052503125,
       "tag": "0011_illegal_wolverine",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1779277245362,
+      "tag": "0012_brown_pretty_boy",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1779279907858,
+      "tag": "0013_calm_lady_mastermind",
+      "breakpoints": true
     }
   ]
 }
