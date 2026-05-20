@@ -42,6 +42,11 @@
   onMount(() => {
     void loadInbox();
   });
+
+  // Drop a row from the client-fetched list when its mark-done succeeds.
+  function removeMessage(id: string): void {
+    if (payload) payload.messages = payload.messages.filter((msg) => msg.id !== id);
+  }
 </script>
 
 <svelte:head>
@@ -95,5 +100,6 @@
     {query}
     emptyTitle={m.inbox_empty_title()}
     emptyBody={m.inbox_empty_body()}
+    onActioned={removeMessage}
   />
 {/if}

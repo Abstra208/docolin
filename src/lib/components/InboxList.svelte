@@ -2,6 +2,7 @@
   import { enhance } from "$app/forms";
   import { m } from "$paraglide/messages";
   import { getLocale, localizeHref } from "$paraglide/runtime";
+  import { refreshSession } from "$lib/client/session.svelte";
   import { Button } from "$lib/components/ui/button";
   import { ScrollArea } from "$lib/components/ui/scroll-area";
   import CheckCircle from "@lucide/svelte/icons/check-circle";
@@ -41,12 +42,17 @@
     query,
     emptyTitle,
     emptyBody,
+    onActioned,
   }: {
     messages: Message[];
     bucket: "inbox" | "done";
     query: string;
     emptyTitle: string;
     emptyBody: string;
+    // Called with the message id after a row's mark-done / move-back succeeds,
+    // so the page can drop it from its client-fetched list (the list isn't a
+    // page `load`, so use:enhance's invalidateAll wouldn't refresh it).
+    onActioned: (id: string) => void;
   } = $props();
 
   const dateFormatter = $derived(new Intl.DateTimeFormat(getLocale(), { dateStyle: "medium" }));
@@ -104,7 +110,7 @@
   <ScrollArea class="h-[calc(100dvh-18rem)]">
     <ul class="flex flex-col gap-3 pr-3">
       {#each filtered as msg (msg.id)}
-        {@const isUnread = msg.readAt === null}
+        {@const isUnread = bucket === "inbox" && msg.readAt === null}
         {@const Icon =
           msg.kind === "claim_approved"
             ? CheckCircle
@@ -157,7 +163,22 @@
              via the shadcn defaults. Separate click target from the row
              link. use:enhance keeps the page in place; the row drops
              from the list because the load filter excludes it. -->
-          <form method="POST" action={rowActionAttrs.formAction} use:enhance class="shrink-0">
+          <form
+            method="POST"
+            action={rowActionAttrs.formAction}
+            use:enhance={() => {
+              // The list is client-fetched, not a page load, so drop the row
+              // locally on success and refresh the session (the bell's unread
+              // count) instead of relying on invalidateAll.
+              return ({ result }) => {
+                if (result.type === "success") {
+                  onActioned(msg.id);
+                  void refreshSession();
+                }
+              };
+            }}
+            class="shrink-0"
+          >
             <input type="hidden" name="id" value={msg.id} />
             <Button
               type="submit"
