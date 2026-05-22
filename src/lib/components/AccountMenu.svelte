@@ -52,7 +52,7 @@
       {#if dbUser.isPlatformAdmin}
         <DropdownMenu.Item>
           {#snippet child({ props })}
-            <a href={localizeHref("/dashboard/admin/claims")} {...props}>
+            <a href={localizeHref("/dashboard/admin")} {...props}>
               {m.nav_admin()}
             </a>
           {/snippet}

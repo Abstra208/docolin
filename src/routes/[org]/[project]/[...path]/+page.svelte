@@ -16,8 +16,11 @@
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import DocoViewerNavbar from "$lib/components/DocoViewerNavbar.svelte";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import ReportDialog from "$lib/components/moderation/ReportDialog.svelte";
+  import RequestDeletionDialog from "$lib/components/moderation/RequestDeletionDialog.svelte";
   import { githubEditUrl } from "$lib/git/github-url";
   import { session } from "$lib/client/session.svelte";
+  import type { ModerationTargetType } from "$lib/moderation-reasons";
   import type { PageProps } from "./$types";
 
   let { data }: PageProps = $props();
@@ -47,6 +50,25 @@
       }
     })();
   });
+
+  // Moderation dialogs target the displayed version. Report is open to any
+  // signed-in reader; request-deletion is gated by canModerate above.
+  interface ModTarget {
+    type: ModerationTargetType;
+    id: string;
+  }
+  let reportTarget = $state<ModTarget | null>(null);
+  let reportOpen = $state(false);
+  let requestDeletionTarget = $state<ModTarget | null>(null);
+  let requestDeletionOpen = $state(false);
+  function openReport(): void {
+    reportTarget = { type: "version", id: doco.versionId };
+    reportOpen = true;
+  }
+  function openRequestDeletion(): void {
+    requestDeletionTarget = { type: "version", id: doco.versionId };
+    requestDeletionOpen = true;
+  }
   // "Edit on GitHub" only exists for git-backed projects; native projects
   // (when shipped) have no source URL to send the user to. The viewer's
   // server load is currently git-only so gitSource.repoUrl is always
@@ -513,12 +535,13 @@
                   class="min-w-48 whitespace-nowrap"
                   preventScroll={false}
                 >
-                  <DropdownMenu.Item disabled>
+                  <DropdownMenu.Item onSelect={openReport}>
                     <Flag class="size-4" />
                     {m.doco_report()}
                   </DropdownMenu.Item>
                   {#if canModerate}
-                    <DropdownMenu.Item disabled variant="destructive">
+                    <DropdownMenu.Separator />
+                    <DropdownMenu.Item variant="destructive" onSelect={openRequestDeletion}>
                       <Trash2 class="size-4" />
                       {m.doco_request_deletion()}
                     </DropdownMenu.Item>
@@ -914,3 +937,7 @@
     {/if}
   </li>
 {/snippet}
+
+<!-- Moderation dialogs for the displayed version (portaled, position-agnostic). -->
+<ReportDialog bind:open={reportOpen} target={reportTarget} />
+<RequestDeletionDialog bind:open={requestDeletionOpen} target={requestDeletionTarget} />

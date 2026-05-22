@@ -13,16 +13,25 @@ import { users } from "./users";
 //   dangerous_content, embargo_violation, copyright, other
 //
 // INTERNAL-ONLY (not in the user picker):
-//   personal_data_self_erasure, compromised_account, court_order
+//   personal_data_self_erasure, compromised_account, court_order, author_request
+//
+// author_request is the reason a deletion request carries when the content's own
+// author deletes it ("hide now, admins decide"). It is not a report reason and
+// never appears in the user-facing picker.
 
 const REASON_VALUES_SQL = sql.raw(
   "('csam', 'ncii', 'threat_violence', 'self_harm', 'doxxing', 'leaked_secret', " +
     "'harassment', 'hate_speech', 'defamation', 'impersonation', 'nsfw_shock', 'spam', " +
     "'dangerous_content', 'embargo_violation', 'copyright', 'other', " +
-    "'personal_data_self_erasure', 'compromised_account', 'court_order')",
+    "'personal_data_self_erasure', 'compromised_account', 'court_order', 'author_request')",
 );
 
-const TARGET_TYPE_VALUES_SQL = sql.raw("('discussion', 'discussion_reply', 'version')");
+// Edit-history versions are moderatable targets in their own right: a leaked
+// secret can sit in a prior body that the author already edited out of the live
+// one, so it needs its own report / hide / redact path.
+const TARGET_TYPE_VALUES_SQL = sql.raw(
+  "('discussion', 'discussion_reply', 'version', 'discussion_edit', 'discussion_reply_edit')",
+);
 
 // User-filed reports. Many users can report the same target; each report is its
 // own row. Mods and admins aggregate them in the queue UI.
@@ -32,7 +41,9 @@ export const reports = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     targetType: text("target_type")
       .notNull()
-      .$type<"discussion" | "discussion_reply" | "version">(),
+      .$type<
+        "discussion" | "discussion_reply" | "version" | "discussion_edit" | "discussion_reply_edit"
+      >(),
     targetId: uuid("target_id").notNull(),
     reportedByUserId: uuid("reported_by_user_id")
       .notNull()
@@ -77,7 +88,9 @@ export const deletionRequests = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     targetType: text("target_type")
       .notNull()
-      .$type<"discussion" | "discussion_reply" | "version">(),
+      .$type<
+        "discussion" | "discussion_reply" | "version" | "discussion_edit" | "discussion_reply_edit"
+      >(),
     targetId: uuid("target_id").notNull(),
     requestedByUserId: uuid("requested_by_user_id")
       .notNull()
@@ -136,7 +149,9 @@ export const moderationActions = pgTable(
       >(),
     targetType: text("target_type")
       .notNull()
-      .$type<"discussion" | "discussion_reply" | "version">(),
+      .$type<
+        "discussion" | "discussion_reply" | "version" | "discussion_edit" | "discussion_reply_edit"
+      >(),
     targetId: uuid("target_id").notNull(),
     relatedRequestId: uuid("related_request_id"),
     reason: text("reason"),

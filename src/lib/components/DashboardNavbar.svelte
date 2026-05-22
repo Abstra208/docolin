@@ -18,6 +18,9 @@
   // segments are links to climb the chain. Slugs render plain (no @ prefix)
   // for parity with public hard URLs.
   const segments = $derived(page.url.pathname.split("/").filter(Boolean));
+  // A route can supply a readable label for its deepest crumb (e.g. an inbox
+  // message uuid renders as "Message"); falls back to the raw segment.
+  const lastLabel = $derived(page.data.breadcrumb ?? segments[segments.length - 1]);
 </script>
 
 <header
@@ -48,7 +51,7 @@
           {@const isLast = i === segments.length - 1}
           <span class="text-foreground/25 shrink-0 font-mono text-xs">/</span>
           {#if isLast}
-            <span class="text-foreground truncate font-mono text-xs">{seg}</span>
+            <span class="text-foreground min-w-0 truncate font-mono text-xs">{lastLabel}</span>
           {:else}
             <a
               href={path}
@@ -75,8 +78,8 @@
         {/if}
         {#if segments.length >= 1}
           <span class="text-foreground/25 shrink-0 font-mono text-xs">/</span>
-          <span class="text-foreground truncate font-mono text-xs">
-            {segments[segments.length - 1]}
+          <span class="text-foreground min-w-0 truncate font-mono text-xs">
+            {lastLabel}
           </span>
         {/if}
       </div>

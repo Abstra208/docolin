@@ -6,6 +6,7 @@
   import Pencil from "@lucide/svelte/icons/pencil";
   import Flag from "@lucide/svelte/icons/flag";
   import Trash2 from "@lucide/svelte/icons/trash-2";
+  import ShieldAlert from "@lucide/svelte/icons/shield-alert";
   import Ellipsis from "@lucide/svelte/icons/ellipsis";
   import CircleCheck from "@lucide/svelte/icons/circle-check";
   import Pin from "@lucide/svelte/icons/pin";
@@ -18,6 +19,10 @@
   import DocoViewerNavbar from "$lib/components/DocoViewerNavbar.svelte";
   import StatusBadge from "$lib/components/discussions/StatusBadge.svelte";
   import Composer from "$lib/components/discussions/Composer.svelte";
+  import ReportDialog from "$lib/components/moderation/ReportDialog.svelte";
+  import RequestDeletionDialog from "$lib/components/moderation/RequestDeletionDialog.svelte";
+  import DeleteConfirm from "$lib/components/moderation/DeleteConfirm.svelte";
+  import type { ModerationTargetType } from "$lib/moderation-reasons";
   import { session } from "$lib/client/session.svelte";
   import { relativeTime } from "$lib/relative-time";
   import { discussionRef } from "$lib/doco-urls";
@@ -66,6 +71,35 @@
   let editingOp = $state(false);
   let editingReplyId = $state<string | null>(null);
 
+  // Moderation dialogs. One shared instance of each lives at the page root; a
+  // kebab item sets the target then opens it. Report = others' content; Delete =
+  // own (author_request); Request deletion = moderator on others'. Splitting by
+  // own/others is what implements the self-report redirect (own content offers
+  // Delete, not Report) without a separate "did you mean to delete?" modal.
+  interface ModTarget {
+    type: ModerationTargetType;
+    id: string;
+  }
+  let reportTarget = $state<ModTarget | null>(null);
+  let reportOpen = $state(false);
+  let requestDeletionTarget = $state<ModTarget | null>(null);
+  let requestDeletionOpen = $state(false);
+  let deleteTarget = $state<ModTarget | null>(null);
+  let deleteOpen = $state(false);
+
+  function openReport(type: ModerationTargetType, id: string): void {
+    reportTarget = { type, id };
+    reportOpen = true;
+  }
+  function openRequestDeletion(type: ModerationTargetType, id: string): void {
+    requestDeletionTarget = { type, id };
+    requestDeletionOpen = true;
+  }
+  function openDelete(type: ModerationTargetType, id: string): void {
+    deleteTarget = { type, id };
+    deleteOpen = true;
+  }
+
   // Props for the shared comment-header snippet. An object (not positional
   // args) so the growing set of flags/callbacks stays readable and order-safe.
   interface PostHeaderProps {
@@ -74,12 +108,15 @@
     createdAt: string;
     isEdited: boolean;
     isOpAuthor: boolean;
-    // Show the Edit item: user owns the post (or moderates) and isn't already
-    // editing it.
+    // The moderation target this post is, so the kebab's report / delete items
+    // act on the right row.
+    targetType: ModerationTargetType;
+    targetId: string;
+    // Whether the viewer authored this post: own content offers Edit + Delete,
+    // others' offers Report (+ Request deletion for moderators).
+    isOwn: boolean;
+    // Show the Edit item: author-only, and not already editing it.
     canEdit: boolean;
-    // Show the Delete item: user owns the post (or moderates). Deleting hides
-    // the comment immediately and queues it for admin review.
-    canDelete: boolean;
     // Anchor (#comment-...) the timestamp links to (per-post permalink).
     permalink: string;
     // True when this post is the thread's accepted answer (shows a chip).
@@ -102,8 +139,10 @@
   // Public edit history (the "edited" dropdown). Lazy-fetched per post on first
   // open and cached, so it never bloats the thread payload.
   interface EditVersion {
+    id: string;
     editedAt: string;
     bodyHtml: string;
+    removed: boolean;
   }
   let historyOpenFor = $state<string | null>(null);
   let historyLoading = $state<string | null>(null);
@@ -209,7 +248,9 @@
           {m.discussion_post_author()}
         </span>
       {/if}
-      {#if p.canEdit || p.canDelete || signedIn}
+      {#if signedIn}
+        {@const hasConstructive = p.canEdit || p.canMarkAnswer === true || !p.isOwn}
+        {@const hasDestructive = (canModerate && !p.isOwn) || p.isOwn}
         <DropdownMenu.Root>
           <DropdownMenu.Trigger>
             {#snippet child({ props })}
@@ -240,19 +281,37 @@
                 {p.isAnswer ? m.discussion_post_unmark_answer() : m.discussion_post_mark_answer()}
               </DropdownMenu.Item>
             {/if}
-            {#if signedIn}
-              <!-- Reporting is not wired up yet; surfaced as a disabled item so
-                   the affordance is visible without claiming to work. -->
-              <DropdownMenu.Item disabled>
+            {#if !p.isOwn}
+              <DropdownMenu.Item
+                onSelect={() => {
+                  openReport(p.targetType, p.targetId);
+                }}
+              >
                 <Flag class="size-4" />
                 {m.discussion_post_report()}
               </DropdownMenu.Item>
             {/if}
-            {#if p.canDelete}
-              <!-- Deleting hides the comment immediately and queues it for admin
-                   review (the deletion-request flow). Disabled placeholder until
-                   that flow is wired up. -->
-              <DropdownMenu.Item disabled variant="destructive">
+            {#if hasConstructive && hasDestructive}
+              <DropdownMenu.Separator />
+            {/if}
+            {#if canModerate && !p.isOwn}
+              <DropdownMenu.Item
+                variant="destructive"
+                onSelect={() => {
+                  openRequestDeletion(p.targetType, p.targetId);
+                }}
+              >
+                <ShieldAlert class="size-4" />
+                {m.discussion_post_request_deletion()}
+              </DropdownMenu.Item>
+            {/if}
+            {#if p.isOwn}
+              <DropdownMenu.Item
+                variant="destructive"
+                onSelect={() => {
+                  openDelete(p.targetType, p.targetId);
+                }}
+              >
                 <Trash2 class="size-4" />
                 {m.discussion_post_delete()}
               </DropdownMenu.Item>
@@ -266,7 +325,8 @@
 
 <!-- Public edit-history panel for a post (the "edited" dropdown), shown inline
      under the comment. Lazy-loaded into historyCache on first open. -->
-{#snippet historyPanel(postId: string)}
+{#snippet historyPanel(postId: string, kind: "discussion" | "reply", isOwn: boolean)}
+  {@const editType = kind === "discussion" ? "discussion_edit" : "discussion_reply_edit"}
   <div class="border-foreground/15 bg-muted/20 border-t px-4 py-3">
     <p class="text-muted-foreground mb-2 text-xs font-medium tracking-wide uppercase">
       {m.discussion_edit_history_title()}
@@ -275,18 +335,83 @@
       <p class="text-muted-foreground text-sm">{m.discussion_edit_history_loading()}</p>
     {:else if historyCache[postId] && historyCache[postId].length > 0}
       <ul class="flex flex-col gap-3">
-        {#each historyCache[postId] as v, i (i)}
-          <li class="border-foreground/10 border">
-            <p
-              class="text-muted-foreground border-foreground/10 bg-muted/30 border-b px-3 py-1 text-xs"
+        {#each historyCache[postId] as v (v.id)}
+          {#if v.removed}
+            <li
+              class="border-foreground/10 text-muted-foreground border border-dashed px-3 py-2 text-xs"
             >
-              {dateFormatter.format(new Date(v.editedAt))}
-            </p>
-            <div class="prose prose-stone prose-sm max-w-none px-3 py-2">
-              <!-- eslint-disable-next-line svelte/no-at-html-tags -- sanitized server-side -->
-              {@html v.bodyHtml}
-            </div>
-          </li>
+              {m.moderation_version_removed()}
+            </li>
+          {:else}
+            <li class="border-foreground/10 border">
+              <div
+                class="text-muted-foreground border-foreground/10 bg-muted/30 flex items-center justify-between gap-2 border-b px-3 py-1 text-xs"
+              >
+                <span>{dateFormatter.format(new Date(v.editedAt))}</span>
+                {#if signedIn}
+                  <DropdownMenu.Root>
+                    <DropdownMenu.Trigger>
+                      {#snippet child({ props })}
+                        <button
+                          {...props}
+                          class="text-muted-foreground hover:text-foreground inline-flex size-6 shrink-0 items-center justify-center transition-colors"
+                          aria-label={m.moderation_version_more()}
+                          title={m.moderation_version_more()}
+                        >
+                          <Ellipsis class="size-3.5" />
+                        </button>
+                      {/snippet}
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Content
+                      align="end"
+                      class="min-w-44 whitespace-nowrap"
+                      preventScroll={false}
+                    >
+                      {#if !isOwn}
+                        <DropdownMenu.Item
+                          onSelect={() => {
+                            openReport(editType, v.id);
+                          }}
+                        >
+                          <Flag class="size-4" />
+                          {m.moderation_version_report()}
+                        </DropdownMenu.Item>
+                      {/if}
+                      {#if !isOwn && (canModerate || isOwn)}
+                        <DropdownMenu.Separator />
+                      {/if}
+                      {#if canModerate && !isOwn}
+                        <DropdownMenu.Item
+                          variant="destructive"
+                          onSelect={() => {
+                            openRequestDeletion(editType, v.id);
+                          }}
+                        >
+                          <ShieldAlert class="size-4" />
+                          {m.moderation_version_request_deletion()}
+                        </DropdownMenu.Item>
+                      {/if}
+                      {#if isOwn}
+                        <DropdownMenu.Item
+                          variant="destructive"
+                          onSelect={() => {
+                            openDelete(editType, v.id);
+                          }}
+                        >
+                          <Trash2 class="size-4" />
+                          {m.moderation_version_delete()}
+                        </DropdownMenu.Item>
+                      {/if}
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Root>
+                {/if}
+              </div>
+              <div class="prose prose-stone prose-sm max-w-none px-3 py-2">
+                <!-- eslint-disable-next-line svelte/no-at-html-tags -- sanitized server-side -->
+                {@html v.bodyHtml}
+              </div>
+            </li>
+          {/if}
         {/each}
       </ul>
     {:else}
@@ -386,8 +511,10 @@
         createdAt: thread.op.createdAt,
         isEdited: thread.op.isEdited,
         isOpAuthor: true,
+        targetType: "discussion",
+        targetId: thread.op.id,
+        isOwn: isMyOp,
         canEdit: isMyOp && !editingOp,
-        canDelete: canManageOp,
         permalink: `#comment-${thread.op.id}`,
         isAnswer: false,
         onEdit: () => (editingOp = true),
@@ -441,7 +568,7 @@
       {/if}
       {#if historyOpenFor === thread.op.id}
         <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -->
-        {@render historyPanel(thread.op.id)}
+        {@render historyPanel(thread.op.id, "discussion", isMyOp)}
       {/if}
     </article>
 
@@ -467,8 +594,10 @@
             createdAt: reply.createdAt,
             isEdited: reply.isEdited,
             isOpAuthor: reply.isOpAuthor,
+            targetType: "discussion_reply",
+            targetId: reply.id,
+            isOwn: isMyReply(reply),
             canEdit: isMyReply(reply) && editingReplyId !== reply.id,
-            canDelete: isMyReply(reply) || canModerate,
             permalink: `#comment-${reply.id}`,
             isAnswer: reply.isAnswer,
             canMarkAnswer: canManageOp,
@@ -521,7 +650,7 @@
           {/if}
           {#if historyOpenFor === reply.id}
             <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -->
-            {@render historyPanel(reply.id)}
+            {@render historyPanel(reply.id, "reply", isMyReply(reply))}
           {/if}
           <!-- Hidden form the "Mark as answer" menu item submits via
                requestSubmit(); empty replyId unmarks. -->
@@ -562,3 +691,8 @@
     />
   </section>
 </div>
+
+<!-- Shared moderation dialogs: one instance each, retargeted by the kebab items. -->
+<ReportDialog bind:open={reportOpen} target={reportTarget} />
+<RequestDeletionDialog bind:open={requestDeletionOpen} target={requestDeletionTarget} />
+<DeleteConfirm bind:open={deleteOpen} target={deleteTarget} />

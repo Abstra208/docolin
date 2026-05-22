@@ -1,11 +1,12 @@
-import { error } from "@sveltejs/kit";
+import { error, fail } from "@sveltejs/kit";
 import { and, desc, eq, inArray, like } from "drizzle-orm";
-import type { PageServerLoad } from "./$types";
+import type { Actions, PageServerLoad } from "./$types";
 import { db } from "$lib/server/db";
 import { docos as docosTable, users, versions } from "$lib/server/db/schema";
 import { fromLtree } from "$lib/server/db/schema/types";
 import { renderMarkdown, extractDocoToc } from "$lib/server/markdown";
 import { resolveDocoIdentity, resolveProjectBySlug } from "$lib/server/doco-resolve";
+import { fileDeletionRequest, submitReport } from "$lib/server/moderation";
 import { pathFromSourcePath, rebuildPathInSource } from "$lib/doco-urls";
 
 // Public doco viewer. URL shape per docs/frontmatter-format.md:
@@ -177,6 +178,9 @@ export const load: PageServerLoad = async ({ params, setHeaders, isDataRequest }
     pathInSource: doco.pathInSource,
     doco: {
       id: doco.docoId,
+      // The displayed version's id, so the viewer's moderation menu can report
+      // or request deletion of this exact version.
+      versionId: doco.versionId,
       title: doco.title,
       description: doco.description,
       kind: fromLtree(doco.kind),
@@ -398,3 +402,72 @@ function isAllHexLower(s: string): boolean {
   }
   return true;
 }
+
+function fieldStr(form: FormData, key: string): string {
+  const v = form.get(key);
+  return typeof v === "string" ? v : "";
+}
+
+// Moderation from the viewer targets the displayed version (target_type
+// "version"). Reporting a doco routes straight to platform staff; "request
+// deletion" is moderator-only. Versions have no in-place hide yet, so neither
+// changes the rendered page; both just file a record for the admin queue.
+export const actions = {
+  report: async ({ request, params, locals }) => {
+    if (!locals.dbUser) return fail(401, { action: "report", error: "generic" });
+    const form = await request.formData();
+    const targetId = fieldStr(form, "targetId");
+    const reason = fieldStr(form, "reason");
+    const details = fieldStr(form, "details").trim();
+    if (fieldStr(form, "targetType") !== "version" || targetId.length === 0) {
+      return fail(400, { action: "report", error: "generic" });
+    }
+
+    const res = await submitReport({
+      targetType: "version",
+      targetId,
+      reportedByUserId: locals.dbUser.id,
+      reason,
+      details,
+      targetUrl: `/${params.org}/${params.project}/${params.path}`,
+    });
+    if (!res.ok) {
+      return fail(res.reason === "invalid_reason" ? 400 : 404, {
+        action: "report",
+        error: res.reason,
+      });
+    }
+    return { action: "report", ok: true };
+  },
+
+  requestDeletion: async ({ request, params, locals }) => {
+    if (!locals.dbUser) return fail(401, { action: "requestDeletion", error: "generic" });
+    const form = await request.formData();
+    const targetId = fieldStr(form, "targetId");
+    const reason = fieldStr(form, "reason");
+    const details = fieldStr(form, "details").trim();
+    if (
+      fieldStr(form, "targetType") !== "version" ||
+      targetId.length === 0 ||
+      reason.length === 0
+    ) {
+      return fail(400, { action: "requestDeletion", error: "generic" });
+    }
+
+    const res = await fileDeletionRequest({
+      targetType: "version",
+      targetId,
+      reason,
+      details,
+      user: { id: locals.dbUser.id, isPlatformAdmin: locals.dbUser.isPlatformAdmin },
+      targetUrl: `/${params.org}/${params.project}/${params.path}`,
+    });
+    if (!res.ok) {
+      return fail(res.reason === "forbidden" ? 403 : res.reason === "invalid_reason" ? 400 : 404, {
+        action: "requestDeletion",
+        error: res.reason,
+      });
+    }
+    return { action: "requestDeletion", ok: true };
+  },
+} satisfies Actions;

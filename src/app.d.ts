@@ -21,6 +21,12 @@ declare global {
     // after hydration. The HTML stays identical for every reader and can
     // be edge-cached.
     // interface PageState {}
+    interface PageData {
+      // Friendly label for the deepest breadcrumb segment, for routes whose
+      // final URL segment is an opaque id (e.g. an inbox message uuid). Must be
+      // static / non-user-specific so the dashboard shell stays edge-cacheable.
+      breadcrumb?: string;
+    }
 
     // Cloudflare bindings + runtime exposed by adapter-cloudflare via
     // wrangler.toml. Available on `event.platform` in server load functions,

@@ -109,7 +109,10 @@ export const discussionReplies = pgTable(
 );
 
 // Author edit history. Original body is preserved here every time the author edits;
-// the current body lives on the discussion / reply row.
+// the current body lives on the discussion / reply row. Each prior version is a
+// moderatable target on its own (same hide / redact semantics as a live post):
+// a secret leaked in an old version still renders in the public history panel
+// until that one row is hidden or redacted.
 export const discussionEdits = pgTable(
   "discussion_edits",
   {
@@ -119,12 +122,25 @@ export const discussionEdits = pgTable(
       .references(() => discussions.id, { onDelete: "cascade" }),
     priorBodyText: text("prior_body_text").notNull(),
     priorBodyFormat: text("prior_body_format").notNull(),
+    hiddenAt: timestamp("hidden_at", { withTimezone: true }),
+    hiddenByUserId: uuid("hidden_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    hiddenReason: text("hidden_reason"),
+    hiddenUntil: timestamp("hidden_until", { withTimezone: true }),
+    isRedacted: boolean("is_redacted").notNull().default(false),
+    redactedAt: timestamp("redacted_at", { withTimezone: true }),
+    redactedByUserId: uuid("redacted_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    redactedReason: text("redacted_reason"),
     editedByUserId: uuid("edited_by_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
     editedAt: timestamp("edited_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index("discussion_edits_discussion_idx").on(t.discussionId)],
+  (t) => [
+    index("discussion_edits_discussion_idx").on(t.discussionId),
+    index("discussion_edits_hidden_idx").on(t.hiddenAt),
+  ],
 );
 
 export const discussionReplyEdits = pgTable(
@@ -136,10 +152,23 @@ export const discussionReplyEdits = pgTable(
       .references(() => discussionReplies.id, { onDelete: "cascade" }),
     priorBodyText: text("prior_body_text").notNull(),
     priorBodyFormat: text("prior_body_format").notNull(),
+    hiddenAt: timestamp("hidden_at", { withTimezone: true }),
+    hiddenByUserId: uuid("hidden_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    hiddenReason: text("hidden_reason"),
+    hiddenUntil: timestamp("hidden_until", { withTimezone: true }),
+    isRedacted: boolean("is_redacted").notNull().default(false),
+    redactedAt: timestamp("redacted_at", { withTimezone: true }),
+    redactedByUserId: uuid("redacted_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    redactedReason: text("redacted_reason"),
     editedByUserId: uuid("edited_by_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
     editedAt: timestamp("edited_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index("discussion_reply_edits_reply_idx").on(t.discussionReplyId)],
+  (t) => [
+    index("discussion_reply_edits_reply_idx").on(t.discussionReplyId),
+    index("discussion_reply_edits_hidden_idx").on(t.hiddenAt),
+  ],
 );

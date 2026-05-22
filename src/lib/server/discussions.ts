@@ -19,29 +19,22 @@ import { renderMarkdown } from "$lib/server/markdown";
 
 export type DiscussionStatus = "open" | "closed" | "resolved";
 
-// Visibility for public reads. Content is hidden when hiddenAt is set, unless
-// an embargo window (hiddenUntil) has already elapsed, in which case the hide
-// auto-reverses. Redacted content is gone for good. Mirrors the column
-// semantics documented in schema/discussions.ts.
+// Visibility for public reads. Content is hidden when hiddenAt is set, unless an
+// embargo window (hiddenUntil) has already elapsed, in which case the hide
+// auto-reverses. Redacted content stays visible: redaction edits the body in
+// place (scrubbing the offending part), so the current body is safe to show.
 function discussionIsVisible(): SQL | undefined {
-  return and(
-    eq(discussions.isRedacted, false),
-    or(
-      isNull(discussions.hiddenAt),
-      sql`${discussions.hiddenUntil} is not null and ${discussions.hiddenUntil} <= now()`,
-    ),
+  return or(
+    isNull(discussions.hiddenAt),
+    sql`${discussions.hiddenUntil} is not null and ${discussions.hiddenUntil} <= now()`,
   );
 }
 
-// Same rule applied in JS for reply rows, which we fetch in full (including
-// hidden ones) so the timeline can render a neutral "removed" placeholder in
-// place rather than silently dropping a reply and breaking the conversation.
-function replyRowIsVisible(r: {
-  isRedacted: boolean;
-  hiddenAt: Date | null;
-  hiddenUntil: Date | null;
-}): boolean {
-  if (r.isRedacted) return false;
+// Same rule applied in JS to any row carrying hide columns (replies and
+// edit-history versions), which we fetch in full (including hidden ones) so the
+// timeline can render a neutral "removed" placeholder rather than silently
+// dropping a row. Redacted rows stay visible (their body was scrubbed in place).
+function contentRowIsVisible(r: { hiddenAt: Date | null; hiddenUntil: Date | null }): boolean {
   if (r.hiddenAt === null) return true;
   return r.hiddenUntil !== null && r.hiddenUntil.getTime() <= Date.now();
 }
@@ -118,7 +111,6 @@ export async function listThreads(docoId: string, filter: ThreadFilter): Promise
       .where(
         and(
           inArray(discussionReplies.discussionId, ids),
-          eq(discussionReplies.isRedacted, false),
           or(
             isNull(discussionReplies.hiddenAt),
             sql`${discussionReplies.hiddenUntil} is not null and ${discussionReplies.hiddenUntil} <= now()`,
@@ -241,7 +233,7 @@ export async function getThread(docoId: string, number: number): Promise<ThreadD
     .from(discussionEdits)
     .where(eq(discussionEdits.discussionId, d.id))
     .limit(1);
-  const visibleReplyIds = rRows.filter(replyRowIsVisible).map((r) => r.id);
+  const visibleReplyIds = rRows.filter(contentRowIsVisible).map((r) => r.id);
   const editedReplyIds = new Set<string>();
   if (visibleReplyIds.length > 0) {
     const editedRows = await db
@@ -253,7 +245,7 @@ export async function getThread(docoId: string, number: number): Promise<ThreadD
 
   const replies: ThreadReply[] = await Promise.all(
     rRows.map(async (r): Promise<ThreadReply> => {
-      if (!replyRowIsVisible(r)) {
+      if (!contentRowIsVisible(r)) {
         return {
           id: r.id,
           authorHandle: "",
@@ -354,8 +346,36 @@ export async function getDiscussionRef(
 }
 
 export interface EditVersion {
+  // Edit-history row id, so per-version moderation (report / hide / redact a
+  // single prior body) can target this version on its own.
+  id: string;
   editedAt: string;
   bodyHtml: string;
+  // True when this prior version was hidden / redacted: body is blanked and the
+  // UI shows a "removed" placeholder, the same treatment as a removed reply.
+  removed: boolean;
+}
+
+// Renders one edit-history row, blanking the body when the version itself has
+// been hidden or redacted (a leak can live in a prior body the author already
+// edited out of the live one, so versions are moderated individually).
+async function renderEditVersion(r: {
+  id: string;
+  priorBodyText: string;
+  editedAt: Date;
+  isRedacted: boolean;
+  hiddenAt: Date | null;
+  hiddenUntil: Date | null;
+}): Promise<EditVersion> {
+  if (!contentRowIsVisible(r)) {
+    return { id: r.id, editedAt: r.editedAt.toISOString(), bodyHtml: "", removed: true };
+  }
+  return {
+    id: r.id,
+    editedAt: r.editedAt.toISOString(),
+    bodyHtml: await renderMarkdown(r.priorBodyText),
+    removed: false,
+  };
 }
 
 // Prior versions of a post, newest first, rendered to sanitized HTML. Edit
@@ -375,16 +395,18 @@ export async function getDiscussionEditHistory(
   if (vis.length === 0) return null;
 
   const rows = await db
-    .select({ priorBodyText: discussionEdits.priorBodyText, editedAt: discussionEdits.editedAt })
+    .select({
+      id: discussionEdits.id,
+      priorBodyText: discussionEdits.priorBodyText,
+      editedAt: discussionEdits.editedAt,
+      isRedacted: discussionEdits.isRedacted,
+      hiddenAt: discussionEdits.hiddenAt,
+      hiddenUntil: discussionEdits.hiddenUntil,
+    })
     .from(discussionEdits)
     .where(eq(discussionEdits.discussionId, discussionId))
     .orderBy(desc(discussionEdits.editedAt));
-  return Promise.all(
-    rows.map(async (r) => ({
-      editedAt: r.editedAt.toISOString(),
-      bodyHtml: await renderMarkdown(r.priorBodyText),
-    })),
-  );
+  return Promise.all(rows.map((r) => renderEditVersion(r)));
 }
 
 export async function getReplyEditHistory(replyId: string): Promise<EditVersion[] | null> {
@@ -397,22 +419,21 @@ export async function getReplyEditHistory(replyId: string): Promise<EditVersion[
     .from(discussionReplies)
     .where(eq(discussionReplies.id, replyId))
     .limit(1);
-  if (vis.length === 0 || !replyRowIsVisible(vis[0])) return null;
+  if (vis.length === 0 || !contentRowIsVisible(vis[0])) return null;
 
   const rows = await db
     .select({
+      id: discussionReplyEdits.id,
       priorBodyText: discussionReplyEdits.priorBodyText,
       editedAt: discussionReplyEdits.editedAt,
+      isRedacted: discussionReplyEdits.isRedacted,
+      hiddenAt: discussionReplyEdits.hiddenAt,
+      hiddenUntil: discussionReplyEdits.hiddenUntil,
     })
     .from(discussionReplyEdits)
     .where(eq(discussionReplyEdits.discussionReplyId, replyId))
     .orderBy(desc(discussionReplyEdits.editedAt));
-  return Promise.all(
-    rows.map(async (r) => ({
-      editedAt: r.editedAt.toISOString(),
-      bodyHtml: await renderMarkdown(r.priorBodyText),
-    })),
-  );
+  return Promise.all(rows.map((r) => renderEditVersion(r)));
 }
 
 // Reply to a thread. Allowed on closed / resolved threads too (matching

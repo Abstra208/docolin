@@ -14,6 +14,8 @@ import {
   setPinned,
   type DiscussionStatus,
 } from "$lib/server/discussions";
+import { fileDeletionRequest, submitReport } from "$lib/server/moderation";
+import type { ModerationTargetType } from "$lib/moderation-reasons";
 import {
   discussionRef,
   discussionUrls,
@@ -40,6 +42,30 @@ function fieldStr(form: FormData, key: string): string {
 function parseStatus(raw: string): DiscussionStatus | null {
   if (raw === "open" || raw === "closed" || raw === "resolved") return raw;
   return null;
+}
+
+// Moderation targets reachable from a thread page: the original post, a reply,
+// or an individual edit-history version of either. Versions are handled on the
+// doco viewer, not here.
+function parseThreadTargetType(raw: string): ModerationTargetType | null {
+  if (
+    raw === "discussion" ||
+    raw === "discussion_reply" ||
+    raw === "discussion_edit" ||
+    raw === "discussion_reply_edit"
+  ) {
+    return raw;
+  }
+  return null;
+}
+
+// Deep-link a target's notification to where it lives in the thread.
+function targetUrlFor(
+  threadUrl: string,
+  targetType: ModerationTargetType,
+  targetId: string,
+): string {
+  return targetType === "discussion_reply" ? `${threadUrl}#comment-${targetId}` : threadUrl;
 }
 
 export const load: PageServerLoad = async ({ params, setHeaders, isDataRequest }) => {
@@ -313,5 +339,80 @@ export const actions = {
     }
     purgeThread(platform, params, ctx);
     return { action: "setPinned", ok: true };
+  },
+
+  // File a report against a post, reply, or one of their edit-history versions.
+  // Logged-in only; doesn't change visible content, so no purge.
+  report: async ({ request, params, locals }) => {
+    if (!locals.dbUser) return fail(401, { action: "report", error: "generic" });
+    const form = await request.formData();
+    const targetType = parseThreadTargetType(fieldStr(form, "targetType"));
+    const targetId = fieldStr(form, "targetId");
+    const reason = fieldStr(form, "reason");
+    const details = fieldStr(form, "details").trim();
+    if (targetType === null || targetId.length === 0) {
+      return fail(400, { action: "report", error: "generic" });
+    }
+
+    const ctx = await actionContext(params, locals.dbUser);
+    if (ctx === null) return fail(404, { action: "report", error: "generic" });
+
+    const res = await submitReport({
+      targetType,
+      targetId,
+      reportedByUserId: locals.dbUser.id,
+      reason,
+      details,
+      targetUrl: targetUrlFor(ctx.threadUrl, targetType, targetId),
+    });
+    if (!res.ok) {
+      return fail(res.reason === "invalid_reason" ? 400 : 404, {
+        action: "report",
+        error: res.reason,
+      });
+    }
+    return { action: "report", ok: true };
+  },
+
+  // Author deletes their own content (reason "author_request") or a moderator
+  // requests deletion of someone's. Filing hides the target immediately, so
+  // purge the thread; if the original post was the target the thread is now
+  // hidden, so send the actor back to the list.
+  requestDeletion: async ({ request, params, locals, platform }) => {
+    if (!locals.dbUser) return fail(401, { action: "requestDeletion", error: "generic" });
+    const form = await request.formData();
+    const targetType = parseThreadTargetType(fieldStr(form, "targetType"));
+    const targetId = fieldStr(form, "targetId");
+    const reason = fieldStr(form, "reason");
+    const details = fieldStr(form, "details").trim();
+    if (targetType === null || targetId.length === 0 || reason.length === 0) {
+      return fail(400, { action: "requestDeletion", error: "generic" });
+    }
+
+    const ctx = await actionContext(params, locals.dbUser);
+    if (ctx === null) return fail(404, { action: "requestDeletion", error: "generic" });
+
+    const res = await fileDeletionRequest({
+      targetType,
+      targetId,
+      reason,
+      details,
+      user: { id: locals.dbUser.id, isPlatformAdmin: locals.dbUser.isPlatformAdmin },
+      targetUrl: targetUrlFor(ctx.threadUrl, targetType, targetId),
+    });
+    if (!res.ok) {
+      return fail(res.reason === "forbidden" ? 403 : res.reason === "invalid_reason" ? 400 : 404, {
+        action: "requestDeletion",
+        error: res.reason,
+      });
+    }
+
+    purgeThread(platform, params, ctx);
+    // The original post being deleted hides the whole thread; nothing left to
+    // show, so return to the doco's discussion list.
+    if (res.wasDiscussion) {
+      redirect(303, localizeHref(`/${params.org}/${params.project}/${params.path}/discussions`));
+    }
+    return { action: "requestDeletion", ok: true };
   },
 } satisfies Actions;
