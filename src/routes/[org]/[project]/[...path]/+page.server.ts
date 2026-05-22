@@ -1,5 +1,7 @@
 import { error, fail } from "@sveltejs/kit";
 import { and, desc, eq, inArray, like } from "drizzle-orm";
+import matter from "gray-matter";
+import { dev } from "$app/environment";
 import type { Actions, PageServerLoad } from "./$types";
 import { db } from "$lib/server/db";
 import { docos as docosTable, users, versions } from "$lib/server/db/schema";
@@ -8,6 +10,9 @@ import { renderMarkdown, extractDocoToc } from "$lib/server/markdown";
 import { resolveDocoIdentity, resolveProjectBySlug } from "$lib/server/doco-resolve";
 import { fileDeletionRequest, submitReport } from "$lib/server/moderation";
 import { pathFromSourcePath, rebuildPathInSource } from "$lib/doco-urls";
+// Dev-only markdown playground content (see pangoPlayground). ?raw bundles the
+// file's text and watches it, so editing it live-reloads the page in dev.
+import pangoSample from "./pango-sample.md?raw";
 
 // Public doco viewer. URL shape per docs/frontmatter-format.md:
 //   /{org-or-user}/{project}/{path-from-project-root}
@@ -40,6 +45,65 @@ const CACHE_LATEST = "public, max-age=0, s-maxage=86400, stale-while-revalidate=
 const CACHE_DATA_REQUEST = "private, no-store";
 
 export const load: PageServerLoad = async ({ params, setHeaders, isDataRequest }) => {
+  // Pango's jungle gym: a dev-only markdown playground. Renders this exact doco
+  // page from a local file instead of the database, so markdown rendering can be
+  // iterated live with one source of truth. Never reachable in production.
+  // Inlined (not a helper) so the load's own return type covers it.
+  if (dev && params.org === "pangos" && params.project === "jungle-gym") {
+    setHeaders({ "cache-control": isDataRequest ? CACHE_DATA_REQUEST : "no-store" });
+    const { data, content } = matter(pangoSample);
+    const fm = data as Record<string, unknown>;
+    const title = typeof fm.title === "string" ? fm.title : "Pango's jungle gym";
+    const description = typeof fm.description === "string" ? fm.description : null;
+    const now = new Date().toISOString();
+    const playgroundAuthors: ResolvedAuthor[] = [
+      { kind: "external", name: "Pango", username: null, url: null },
+    ];
+    return {
+      org: { slug: "pangos", displayName: "Pango" },
+      project: { slug: "jungle-gym", displayName: "Pango's jungle gym" },
+      gitSource: { repoUrl: "", defaultBranch: "main" },
+      pathInSource: null,
+      doco: {
+        id: "pango-jungle-gym",
+        versionId: "pango-jungle-gym-v1",
+        title,
+        description,
+        kind: "pango/jungle-gym",
+        type: "reference" as const,
+        status: "stable" as const,
+        difficulty: null,
+        timeEstimateMinMinutes: null,
+        timeEstimateMaxMinutes: null,
+        language: "en",
+        appliesTo: [] as string[],
+        deletedAt: null,
+        bodyText: content,
+        bodyHtml: await renderMarkdown(content),
+        toc: extractDocoToc(content),
+        prevNav: null,
+        nextNav: null,
+        sitemap: null,
+        authors: playgroundAuthors,
+        verifiedCount: 0,
+        versionNumber: 1,
+        commitSha: null,
+        versionTag: null,
+        pathFromProjectRoot: "",
+        publishedAt: now,
+        versions: [
+          {
+            versionNumber: 1,
+            commitSha: null,
+            versionTag: null,
+            publishedAt: now,
+            verifiedCount: 0,
+          },
+        ],
+      },
+    };
+  }
+
   // Find project + source for the (org, project) URL pair. Native projects
   // have no git_source row, handled as 404 for v1 since native rendering
   // isn't built yet.
