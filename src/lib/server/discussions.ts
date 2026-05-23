@@ -654,9 +654,7 @@ export async function notifyNewReply(args: {
 
   const bodyMarkdown = `A new reply was posted in this discussion.
 
-:::btn
-[Open the discussion](${args.threadUrl})
-:::`;
+[Open the discussion](${args.threadUrl}){ .md-button .md-button--primary }`;
 
   await db.insert(inboxMessages).values(
     [...recipients].map((userId) => ({

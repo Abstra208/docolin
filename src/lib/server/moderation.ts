@@ -265,14 +265,12 @@ export async function redactContent(
   }
 }
 
-// Builds an inbox markdown body with an optional "open it" button.
+// Builds an inbox markdown body with an optional "open it" link.
 function notificationBody(text: string, targetUrl: string | undefined): string {
   if (targetUrl === undefined) return text;
   return `${text}
 
-:::btn
-[Open it](${targetUrl})
-:::`;
+[Open it](${targetUrl}){ .md-button .md-button--primary }`;
 }
 
 export type ReportResult = { ok: true } | { ok: false; reason: "not_found" | "invalid_reason" };

@@ -433,9 +433,7 @@ function notificationBody(text: string, url: string | null): string {
   if (url === null) return text;
   return `${text}
 
-:::btn
-[Open it](${url})
-:::`;
+[Open it](${url}){ .md-button .md-button--primary }`;
 }
 
 // Closes out every open report on a target and tells each distinct reporter the

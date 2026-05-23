@@ -210,7 +210,7 @@
         {@render toolButton(
           Info,
           m.discussion_editor_callout(),
-          () => void insertBlock(":::info\n", "\n:::\n", "Note"),
+          () => void insertBlock("!!! info\n    ", "", "Note"),
         )}
         <!-- eslint-enable @typescript-eslint/no-confusing-void-expression -->
       </div>

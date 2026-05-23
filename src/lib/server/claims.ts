@@ -98,9 +98,7 @@ export async function approveClaim({
         preview: `Your org is live. Open it to set up details and create your first project.`,
         bodyMarkdown: `Your org is now live and ready to use.
 
-:::btn
-[Open the org](/dashboard/${claim.requestedSlug})
-:::
+[Open the org](/dashboard/${claim.requestedSlug}){ .md-button .md-button--primary }
 
 **What's next**
 
@@ -130,9 +128,8 @@ Reference: \`${claim.uid}\``,
               preview: `Another claimant was verified for this slug. You can pick a different one or appeal.`,
               bodyMarkdown: `Another claimant was verified for this slug first, which automatically cancels your claim.
 
-:::info
-Multiple users had pending claims for the same brand. We verified the other claimant first.
-:::
+!!! info
+    Multiple users had pending claims for the same brand. We verified the other claimant first.
 
 **What you can do**
 
@@ -198,6 +195,12 @@ export async function cancelClaim({
     );
     const supportMailto = `mailto:support@docolin.com?subject=${supportSubject}&body=${supportBody}`;
 
+    // Indent the reviewer's notes so they sit inside the warning admonition body.
+    const reviewNote = notes
+      .split("\n")
+      .map((line) => (line.length > 0 ? "    " + line : ""))
+      .join("\n");
+
     await tx.insert(inboxMessages).values({
       userId: claim.requestedByUserId,
       kind: "claim_cancelled",
@@ -205,11 +208,8 @@ export async function cancelClaim({
       preview: `Reviewed and declined. Check the reason and recourse options.`,
       bodyMarkdown: `The review concluded with a decline.
 
-:::warning
-**Reason from review**
-
-${notes}
-:::
+!!! warning "Reason from review"
+${reviewNote}
 
 **What you can do**
 
