@@ -10,9 +10,79 @@ import { renderMarkdown, extractDocoToc } from "$lib/server/markdown";
 import { resolveDocoIdentity, resolveProjectBySlug } from "$lib/server/doco-resolve";
 import { fileDeletionRequest, submitReport } from "$lib/server/moderation";
 import { pathFromSourcePath, rebuildPathInSource } from "$lib/doco-urls";
-// Dev-only markdown playground content (see pangoPlayground). ?raw bundles the
-// file's text and watches it, so editing it live-reloads the page in dev.
-import pangoSample from "./pango-sample.md?raw";
+// Dev-only markdown playground content. Each file under ./pango is one page;
+// ?raw bundles + watches it so editing live-reloads in dev. See the playground
+// branch in `load`.
+import pangoWelcome from "./pango/welcome.md?raw";
+import pangoText from "./pango/text.md?raw";
+import pangoCode from "./pango/code.md?raw";
+import pangoTables from "./pango/tables.md?raw";
+import pangoAdmonitions from "./pango/admonitions.md?raw";
+import pangoSteps from "./pango/steps.md?raw";
+import pangoCards from "./pango/cards.md?raw";
+import pangoAccordion from "./pango/accordion.md?raw";
+import pangoNesting from "./pango/nesting.md?raw";
+import pangoCrazy from "./pango/crazy.md?raw";
+
+interface PangoPage {
+  slug: string;
+  title: string;
+  description: string | null;
+  content: string;
+}
+
+// Each file is one page; frontmatter is parsed once at module load.
+const PANGO_PAGES: PangoPage[] = [
+  { slug: "welcome", raw: pangoWelcome },
+  { slug: "text", raw: pangoText },
+  { slug: "code", raw: pangoCode },
+  { slug: "tables", raw: pangoTables },
+  { slug: "admonitions", raw: pangoAdmonitions },
+  { slug: "steps", raw: pangoSteps },
+  { slug: "cards", raw: pangoCards },
+  { slug: "accordion", raw: pangoAccordion },
+  { slug: "nesting", raw: pangoNesting },
+  { slug: "crazy", raw: pangoCrazy },
+].map(({ slug, raw }) => {
+  const { data, content } = matter(raw);
+  const fm = data as Record<string, unknown>;
+  return {
+    slug,
+    title: typeof fm.title === "string" ? fm.title : slug,
+    description: typeof fm.description === "string" ? fm.description : null,
+    content,
+  };
+});
+
+// Sectioned sidebar nav, which also exercises the viewer's branch (children)
+// rendering. Leaf urls match the page slugs above.
+const PANGO_SITEMAP = [
+  { title: "Welcome", url: "/pangos/jungle-gym/welcome" },
+  {
+    title: "Basics",
+    children: [
+      { title: "Text & lists", url: "/pangos/jungle-gym/text" },
+      { title: "Code blocks", url: "/pangos/jungle-gym/code" },
+      { title: "Tables & more", url: "/pangos/jungle-gym/tables" },
+    ],
+  },
+  {
+    title: "Callouts & constructs",
+    children: [
+      { title: "Admonitions", url: "/pangos/jungle-gym/admonitions" },
+      { title: "Steps", url: "/pangos/jungle-gym/steps" },
+      { title: "Cards", url: "/pangos/jungle-gym/cards" },
+      { title: "Accordion", url: "/pangos/jungle-gym/accordion" },
+    ],
+  },
+  {
+    title: "Edge cases",
+    children: [
+      { title: "Nesting & edge cases", url: "/pangos/jungle-gym/nesting" },
+      { title: "Crazy nesting", url: "/pangos/jungle-gym/crazy" },
+    ],
+  },
+];
 
 // Public doco viewer. URL shape per docs/frontmatter-format.md:
 //   /{org-or-user}/{project}/{path-from-project-root}
@@ -45,16 +115,16 @@ const CACHE_LATEST = "public, max-age=0, s-maxage=86400, stale-while-revalidate=
 const CACHE_DATA_REQUEST = "private, no-store";
 
 export const load: PageServerLoad = async ({ params, setHeaders, isDataRequest }) => {
-  // Pango's jungle gym: a dev-only markdown playground. Renders this exact doco
-  // page from a local file instead of the database, so markdown rendering can be
-  // iterated live with one source of truth. Never reachable in production.
-  // Inlined (not a helper) so the load's own return type covers it.
+  // Pango's jungle gym: a dev-only markdown playground. Renders pages from local
+  // files instead of the database, split across a sidebar sitemap, so markdown
+  // rendering can be iterated live with one source of truth. Never reachable in
+  // production. Inlined (not a helper) so the load's own return type covers it.
   if (dev && params.org === "pangos" && params.project === "jungle-gym") {
     setHeaders({ "cache-control": isDataRequest ? CACHE_DATA_REQUEST : "no-store" });
-    const { data, content } = matter(pangoSample);
-    const fm = data as Record<string, unknown>;
-    const title = typeof fm.title === "string" ? fm.title : "Pango's jungle gym";
-    const description = typeof fm.description === "string" ? fm.description : null;
+    // Bare /pangos/jungle-gym shows the first page; otherwise the path is the slug.
+    const slug = params.path === "" ? PANGO_PAGES[0].slug : params.path;
+    const page = PANGO_PAGES.find((candidate) => candidate.slug === slug);
+    if (page === undefined) error(404);
     const now = new Date().toISOString();
     const playgroundAuthors: ResolvedAuthor[] = [
       { kind: "external", name: "Pango", username: null, url: null },
@@ -65,10 +135,10 @@ export const load: PageServerLoad = async ({ params, setHeaders, isDataRequest }
       gitSource: { repoUrl: "", defaultBranch: "main" },
       pathInSource: null,
       doco: {
-        id: "pango-jungle-gym",
-        versionId: "pango-jungle-gym-v1",
-        title,
-        description,
+        id: `pango-jungle-gym-${page.slug}`,
+        versionId: `pango-jungle-gym-${page.slug}-v1`,
+        title: page.title,
+        description: page.description,
         kind: "pango/jungle-gym",
         type: "reference" as const,
         status: "stable" as const,
@@ -78,18 +148,18 @@ export const load: PageServerLoad = async ({ params, setHeaders, isDataRequest }
         language: "en",
         appliesTo: [] as string[],
         deletedAt: null,
-        bodyText: content,
-        bodyHtml: await renderMarkdown(content),
-        toc: extractDocoToc(content),
+        bodyText: page.content,
+        bodyHtml: await renderMarkdown(page.content),
+        toc: extractDocoToc(page.content),
         prevNav: null,
         nextNav: null,
-        sitemap: null,
+        sitemap: PANGO_SITEMAP,
         authors: playgroundAuthors,
         verifiedCount: 0,
         versionNumber: 1,
         commitSha: null,
         versionTag: null,
-        pathFromProjectRoot: "",
+        pathFromProjectRoot: page.slug,
         publishedAt: now,
         versions: [
           {

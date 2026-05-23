@@ -27,7 +27,7 @@ describe("admonitions", () => {
   });
 
   it("falls back to the neutral box for unknown types", async () => {
-    expect(await render("!!! steps\n    1. a\n")).toContain("border-foreground/20");
+    expect(await render("!!! mystery\n    surfaced typo\n")).toContain("border-foreground/20");
   });
 
   it("renders nested admonitions", async () => {
@@ -84,5 +84,87 @@ describe("table of contents", () => {
     const toc = extractToc("# Title\n\n## A\n\n### B\n\n#### C\n");
     expect(toc.map((entry) => entry.level)).toEqual([2, 3]);
     expect(toc.map((entry) => entry.text)).toEqual(["A", "B"]);
+  });
+});
+
+describe("list-wrapping constructs", () => {
+  it("renders steps as a numbered stepper, not a callout", async () => {
+    const html = await render("!!! steps\n    1. First\n    2. Second\n    3. Third\n");
+    expect(html).toContain("size-7");
+    expect(html).toContain("First");
+    expect(html).toContain("Third");
+    expect(html).not.toContain("border-l-4");
+  });
+
+  it("shows a steps title only when one is given", async () => {
+    expect(await render('!!! steps "Install"\n    1. a\n')).toContain("Install");
+    expect(await render("!!! steps\n    1. a\n")).not.toContain(">Steps<");
+  });
+
+  it("renders cards in a column grid from { cols=N }", async () => {
+    const html = await render("!!! cards { cols=2 }\n    - [A](/a)\n    - [B](/b)\n");
+    expect(html).toContain("sm:grid-cols-2");
+    expect(html).toContain('href="/a"');
+  });
+
+  it("renders cards as an auto-fit grid without cols", async () => {
+    expect(await render("!!! cards\n    - one\n    - two\n")).toContain("auto-fit");
+  });
+
+  it("renders an accordion as grouped exclusive-open details", async () => {
+    const html = await render(
+      "!!! accordion\n    - Q one\n\n      A one\n    - Q two\n\n      A two\n",
+    );
+    expect(html).toContain('name="docomd-accordion-');
+    expect(html).toContain("<details");
+    expect(html).toContain("Q one");
+    expect(html).toContain("A one");
+  });
+});
+
+describe("nesting (playground edge cases)", () => {
+  it("nests a callout inside a callout", async () => {
+    const html = await render("!!! note\n    outer\n\n    !!! warning\n        inner\n");
+    expect(html).toContain("border-foreground/20");
+    expect(html).toContain("border-amber-500/50");
+    expect(html).toContain("inner");
+  });
+
+  it("nests three levels deep", async () => {
+    const html = await render("!!! note\n    !!! info\n        !!! tip\n            deep\n");
+    expect(html).toContain("border-foreground/20");
+    expect(html).toContain("border-primary/40");
+    expect(html).toContain("border-emerald-500/40");
+    expect(html).toContain("deep");
+  });
+
+  it("puts a collapsible inside a callout", async () => {
+    const html = await render('!!! info\n    intro\n\n    ??? tip "more"\n        hidden\n');
+    expect(html).toContain("<details");
+    expect(html).toContain("hidden");
+  });
+
+  it("nests cards inside a card", async () => {
+    const html = await render("!!! cards\n    - outer\n\n        !!! cards\n            - inner\n");
+    expect((html.match(/grid gap-4/g) ?? []).length).toBe(2);
+    expect(html).toContain("inner");
+  });
+
+  it("puts an accordion and a stepper inside cards", async () => {
+    const html = await render(
+      "!!! cards { cols=2 }\n" +
+        "    - **Q & A**\n\n" +
+        "        !!! accordion\n" +
+        "            - one\n\n" +
+        "              answer\n" +
+        "    - **Steps**\n\n" +
+        "        !!! steps\n" +
+        "            1. a\n" +
+        "            2. b\n",
+    );
+    expect(html).toContain("sm:grid-cols-2");
+    expect(html).toContain("<details");
+    expect(html).toContain("size-7");
+    expect(html).toContain("answer");
   });
 });

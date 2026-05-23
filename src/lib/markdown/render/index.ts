@@ -27,7 +27,9 @@ export type Highlight = (code: string, lang: string) => Promise<HastRoot>;
 // cache key); no DB backfill needed.
 export const RENDERER_VERSION = "1";
 
-const SANITIZE_ADD_ATTR = ["class", "target", "rel", "id", "style", "open"];
+// `name` is for exclusive-open accordions (<details name>); `open` for the
+// collapsible state; the rest carry classes/anchors/shiki styles/link rels.
+const SANITIZE_ADD_ATTR = ["class", "target", "rel", "id", "style", "open", "name"];
 
 /** Sanitizes rendered HTML. One step shared by every render path. */
 export function sanitizeHtml(raw: string): string {

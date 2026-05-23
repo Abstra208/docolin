@@ -1,5 +1,6 @@
 import { h, s } from "hastscript";
-import type { Element } from "hast";
+import type { Element, ElementContent } from "hast";
+import type { ListItem } from "mdast";
 import type { State } from "mdast-util-to-hast";
 import { ChevronDown, Info, Lightbulb, OctagonAlert, Pencil, TriangleAlert } from "lucide";
 import { admonitionTitle, type Admonition } from "$lib/markdown/docomd";
@@ -10,6 +11,10 @@ import { admonitionTitle, type Admonition } from "$lib/markdown/docomd";
 // lives here rather than in the design-agnostic docomd package. The markup
 // matches what the markdown CSS and the .markdown-collapsible animation in
 // layout.css expect.
+//
+// Five callout types plus three list-wrapping constructs: steps (a numbered
+// vertical stepper), cards (a responsive grid), and accordion (grouped
+// exclusive-open <details>).
 
 // lucide doesn't export its IconNode type by a stable name, so derive it.
 type LucideIcon = typeof Info;
@@ -47,6 +52,19 @@ function iconHast(name: IconName, className: string): Element {
     children,
   );
 }
+
+const BODY_RESET = ["[&>*:first-child]:mt-0", "[&>*:last-child]:mb-0"];
+
+// First list in the body. steps/cards/accordion each wrap a markdown list; this
+// pulls its items. Returns [] if the body is not a list (graceful degrade).
+function bodyListItems(node: Admonition): ListItem[] {
+  for (const child of node.children) {
+    if (child.type === "list") return child.children;
+  }
+  return [];
+}
+
+// ---------- Callouts + collapsibles ----------
 
 interface AdmonitionConfig {
   icon: IconName;
@@ -96,18 +114,13 @@ const CALLOUTS: Record<string, AdmonitionConfig> = {
   },
 };
 
-// Unknown / not-yet-styled types (typos, or steps/cards/accordion before they get
-// their own renderers) fall back to a neutral box, so mistakes stay visible.
+// Unknown types (typos) fall back to a neutral box, so mistakes stay visible.
 const NEUTRAL = CALLOUTS.note;
 
-const BODY_RESET = ["[&>*:first-child]:mt-0", "[&>*:last-child]:mb-0"];
-
-/** remark-rehype handler: an `admonition` mdast node to styled hast. */
-export function admonitionHandler(state: State, node: Admonition): Element {
+function renderCallout(state: State, node: Admonition): Element {
   const cfg = CALLOUTS[node.atype] ?? NEUTRAL;
   const title = admonitionTitle(node);
-  const children = state.all(node);
-  const body = h("div", { class: ["px-4", "py-3", cfg.body, ...BODY_RESET] }, children);
+  const body = h("div", { class: ["px-4", "py-3", cfg.body, ...BODY_RESET] }, state.all(node));
 
   if (node.collapsible) {
     return h(
@@ -169,4 +182,133 @@ export function admonitionHandler(state: State, node: Admonition): Element {
     ),
     body,
   ]);
+}
+
+// ---------- Steps ----------
+
+// Numbered vertical stepper: a square badge per item joined by a connector line.
+function renderSteps(state: State, node: Admonition): Element {
+  const items = bodyListItems(node);
+  const steps = items.map((item, index) => {
+    const marker = h("div", { class: ["flex", "flex-col", "items-center"] }, [
+      h(
+        "span",
+        {
+          class: [
+            "flex",
+            "size-7",
+            "shrink-0",
+            "items-center",
+            "justify-center",
+            "bg-primary",
+            "text-sm",
+            "font-medium",
+            "text-primary-foreground",
+          ],
+        },
+        String(index + 1),
+      ),
+      ...(index === items.length - 1
+        ? []
+        : [h("span", { class: ["my-1", "w-px", "flex-1", "bg-border"] })]),
+    ]);
+    const content = h(
+      "div",
+      { class: ["min-w-0", "flex-1", "pb-6", ...BODY_RESET] },
+      state.all(item),
+    );
+    return h("div", { class: ["flex", "gap-3"] }, [marker, content]);
+  });
+  const heading =
+    node.title.length > 0
+      ? [h("p", { class: ["mb-4", "font-semibold", "text-foreground"] }, node.title)]
+      : [];
+  return h("div", { class: ["my-4"] }, [...heading, ...steps]);
+}
+
+// ---------- Cards ----------
+
+const COLS_CLASSES: Record<number, string[]> = {
+  1: ["grid-cols-1"],
+  2: ["grid-cols-1", "sm:grid-cols-2"],
+  3: ["grid-cols-1", "sm:grid-cols-2", "lg:grid-cols-3"],
+  4: ["grid-cols-1", "sm:grid-cols-2", "lg:grid-cols-4"],
+};
+// Default: as many ~15rem columns as fit, so authors rarely need `cols`.
+const COLS_AUTO = ["grid-cols-[repeat(auto-fit,minmax(15rem,1fr))]"];
+
+function parseCols(attrs: string): number | null {
+  for (const token of attrs.split(" ")) {
+    if (token.startsWith("cols=")) {
+      const value = Number(token.slice("cols=".length));
+      if (Number.isInteger(value) && value >= 1 && value <= 4) return value;
+    }
+  }
+  return null;
+}
+
+function renderCards(state: State, node: Admonition): Element {
+  const cols = parseCols(node.attrs);
+  const grid = cols === null ? COLS_AUTO : COLS_CLASSES[cols];
+  const cards = bodyListItems(node).map((item) =>
+    h("div", { class: ["border", "p-6", ...BODY_RESET] }, state.all(item)),
+  );
+  return h("div", { class: ["my-4", "grid", "gap-4", ...grid] }, cards);
+}
+
+// ---------- Accordion ----------
+
+// Per-group name so opening one row closes the others (native <details name>).
+// A module counter is fine: names only need to be unique within one rendered
+// page, and each render produces an independent document.
+let accordionGroup = 0;
+
+function renderAccordion(state: State, node: Admonition): Element {
+  const name = `docomd-accordion-${String(accordionGroup++)}`;
+  const rows = bodyListItems(node).map((item) => {
+    const content = state.all(item);
+    const head = content.at(0);
+    const rest = content.slice(1);
+    // The first block (usually a paragraph) is the clickable question; the rest
+    // is the collapsible body.
+    const summaryChildren: ElementContent[] =
+      head === undefined ? [] : head.type === "element" ? head.children : [head];
+    return h("details", { name, class: ["markdown-collapsible", "group"] }, [
+      h(
+        "summary",
+        {
+          class: [
+            "flex",
+            "cursor-pointer",
+            "list-none",
+            "items-center",
+            "gap-2",
+            "px-4",
+            "py-3",
+            "font-medium",
+            "[&::-webkit-details-marker]:hidden",
+          ],
+        },
+        [
+          h("span", { class: ["min-w-0", "flex-1"] }, summaryChildren),
+          iconHast(
+            "chevron-down",
+            "size-4 shrink-0 group-open:rotate-180 motion-safe:transition-transform",
+          ),
+        ],
+      ),
+      h("div", { class: ["px-4", "pb-3", ...BODY_RESET] }, rest),
+    ]);
+  });
+  return h("div", { class: ["divide-border", "my-4", "divide-y", "border"] }, rows);
+}
+
+// ---------- Entry ----------
+
+/** remark-rehype handler: an `admonition` mdast node to styled hast. */
+export function admonitionHandler(state: State, node: Admonition): Element {
+  if (node.atype === "steps") return renderSteps(state, node);
+  if (node.atype === "cards") return renderCards(state, node);
+  if (node.atype === "accordion") return renderAccordion(state, node);
+  return renderCallout(state, node);
 }
