@@ -101,6 +101,26 @@ export function applySharedExtensions(marked: Marked): void {
         const id = slugify(plain);
         return `<h${String(depth)} id="${id}">${inner}</h${String(depth)}>\n`;
       },
+      // GFM task-list checkbox, styled to match the shadcn Checkbox (we can't
+      // mount the Svelte component into rendered HTML, so we emit the same look:
+      // a square box, primary fill + check icon when ticked). Read-only, like
+      // GitHub renders task lists. Class literals live here so Tailwind picks
+      // them up (same as the callouts above).
+      checkbox({ checked }) {
+        const box =
+          "mr-2 inline-flex size-4 shrink-0 items-center justify-center border align-[-0.2em]";
+        if (checked) {
+          return `<span role="checkbox" aria-checked="true" aria-disabled="true" class="${box} border-primary bg-primary text-primary-foreground"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="size-3"><path d="M20 6 9 17l-5-5"/></svg></span>`;
+        }
+        return `<span role="checkbox" aria-checked="false" aria-disabled="true" class="${box} border-input bg-background"></span>`;
+      },
+      // Drop the list bullet on task items so the checkbox is the only marker
+      // (GitHub-style). Non-task items keep the default rendering.
+      listitem(item) {
+        const inner = this.parser.parse(item.tokens);
+        if (item.task) return `<li class="list-none">${inner}</li>\n`;
+        return `<li>${inner}</li>\n`;
+      },
     },
   });
 

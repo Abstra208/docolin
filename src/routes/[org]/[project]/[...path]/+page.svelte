@@ -728,7 +728,7 @@
       <!-- Rendered body. .prose handles typography; the directive renderers
            in markdown.ts already emit our own callouts; shiki handles code. -->
       <div
-        class="prose prose-stone prose-headings:scroll-mt-20 prose-headings:font-semibold prose-h1:hidden max-w-none"
+        class="prose prose-stone prose-headings:scroll-mt-20 prose-headings:font-semibold prose-h1:hidden max-w-[72ch]"
       >
         <!-- eslint-disable-next-line svelte/no-at-html-tags -->
         {@html doco.bodyHtml}
