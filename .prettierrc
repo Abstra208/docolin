@@ -6,7 +6,11 @@
   "trailingComma": "all",
   "bracketSpacing": true,
   "printWidth": 100,
-  "plugins": ["prettier-plugin-svelte", "prettier-plugin-tailwindcss"],
+  "plugins": [
+    "prettier-plugin-svelte",
+    "prettier-plugin-tailwindcss",
+    "./src/lib/markdown/prettier-docomd/index.ts"
+  ],
   "overrides": [
     {
       "files": "*.svelte",

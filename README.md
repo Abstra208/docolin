@@ -50,9 +50,9 @@ See [`CLAUDE.md`](./CLAUDE.md) for code style, design system, and conventions.
 
 ## Contact
 
-- **General**: hello@docolin.com
-- **Support**: support@docolin.com
-- **Security**: security@docolin.com (see [SECURITY.md](./SECURITY.md))
+- **General**: <hello@docolin.com>
+- **Support**: <support@docolin.com>
+- **Security**: <security@docolin.com> (see [SECURITY.md](./SECURITY.md))
 
 All addresses are hosted on Proton Mail and support end-to-end encryption.
 

@@ -1,6 +1,6 @@
 import { Marked, type Tokens } from "marked";
-import { createDirectives } from "marked-directive";
 import DOMPurify from "isomorphic-dompurify";
+import { applyAdmonitions } from "$lib/markdown/admonitions";
 import { slugify } from "$lib/slug";
 
 // Re-exported so existing markdown consumers keep importing slugify from here;
@@ -22,66 +22,18 @@ export { slugify };
 // on this config.
 export const RENDERER_VERSION = "1";
 
-// Sanitizer allowlist additions: directive renderers emit Tailwind classes,
-// the heading renderer emits id="" for TOC anchors, shiki emits inline
-// style="color: ..." on code spans, and the link renderer emits target/rel.
-export const SANITIZE_ADD_ATTR = ["class", "target", "rel", "id", "style"];
+// Sanitizer allowlist additions: renderers emit Tailwind classes, the heading
+// renderer emits id="" for TOC anchors, shiki emits inline style="color: ..."
+// on code spans, the link renderer emits target/rel, and collapsible
+// admonitions emit <details open>.
+export const SANITIZE_ADD_ATTR = ["class", "target", "rel", "id", "style", "open"];
 
-// The resets pull the prose plugin's paragraph margins off the first/last
-// children of a callout so its own padding isn't doubled up.
-const CALLOUT_BASE = "border border-l-4 p-4 my-3 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0";
-
-// Names match the Docusaurus / Starlight convention so imported docs render
-// with no rewrite step. info = primary tint, warning = amber,
-// danger = destructive tint, note = neutral, tip = emerald.
-const CALLOUT_CLASSES: Record<string, string> = {
-  info: `border-primary/40 bg-primary/5 ${CALLOUT_BASE}`,
-  warning: `border-amber-500/40 bg-amber-50 ${CALLOUT_BASE}`,
-  danger: `border-destructive/40 bg-destructive/5 ${CALLOUT_BASE}`,
-  note: `border-foreground/15 bg-muted/40 ${CALLOUT_BASE}`,
-  tip: `border-emerald-500/40 bg-emerald-50 ${CALLOUT_BASE}`,
-};
-
-// Applies the isomorphic extensions to a Marked instance: the `:::name` block
-// directives (callouts + btn), the external-link renderer (new tab + noopener),
-// and heading ids for TOC anchoring. Code-block highlighting is intentionally
-// not here, see the file header.
+// Applies the isomorphic extensions to a Marked instance: the MkDocs-style
+// admonition blocks (callouts + collapsibles), the external-link renderer (new
+// tab + noopener), and heading ids for TOC anchoring. Code-block highlighting is
+// intentionally not here, see the file header.
 export function applySharedExtensions(marked: Marked): void {
-  marked.use(
-    createDirectives([
-      {
-        level: "container",
-        marker: ":::",
-        renderer(token) {
-          // marked-directive exposes meta.name (the directive identifier) and
-          // tokens (parsed children). Only narrowing here, not asserting,
-          // because the package's types are loose around custom directives.
-          const t = token as Tokens.Generic & {
-            meta?: { name?: string };
-            tokens?: Tokens.Generic[];
-          };
-          const name = t.meta?.name ?? "";
-          const inner = this.parser.parse(t.tokens ?? []);
-
-          if (name === "btn") {
-            // Strip the wrapping <p> the inner [link](url) becomes so the
-            // anchor renders as a standalone button without an extra block.
-            const linkOnly = inner.replace(/^<p>\s*/, "").replace(/\s*<\/p>\s*$/, "");
-            return `<div class="my-4">${linkOnly.replace(
-              /^<a /,
-              '<a class="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex h-11 items-center gap-2 px-5 text-base font-medium no-underline transition-colors" ',
-            )}</div>`;
-          }
-
-          if (name in CALLOUT_CLASSES) {
-            return `<div class="${CALLOUT_CLASSES[name]}">${inner}</div>`;
-          }
-
-          return false;
-        },
-      },
-    ]),
-  );
+  applyAdmonitions(marked);
 
   // External destinations (mailto, http, https, anything not starting with "/"
   // or "#") open in a new tab with noopener; internal links keep same-tab nav.

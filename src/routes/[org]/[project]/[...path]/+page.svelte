@@ -725,8 +725,8 @@
         </div>
       {/if}
 
-      <!-- Rendered body. .prose handles typography; the directive renderers
-           in markdown.ts already emit our own callouts; shiki handles code. -->
+      <!-- Rendered body. .prose handles typography; the markdown renderer emits
+           our callouts/admonitions; shiki handles code. -->
       <div
         class="prose prose-stone prose-headings:scroll-mt-20 prose-headings:font-semibold prose-h1:hidden max-w-[72ch]"
       >

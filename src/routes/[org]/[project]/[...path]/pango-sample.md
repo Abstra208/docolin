@@ -10,7 +10,7 @@ a piece of equipment he's about to climb, so edit
 
 He brought a `snack`, left a note at [the burrow](/pangos/jungle-gym), waved at a
 [friend off-site](https://example.com) (new tab, very polite), and shouted his
-address into the void: https://docolin.com.
+address into the void: <https://docolin.com>.
 
 Two lines of chatter,
 which stay one paragraph because line breaks are off (good, Pango talks a lot).
@@ -119,37 +119,44 @@ An unknown language, so Pango can confirm it falls back without faceplanting:
 
 ## Signs around the gym
 
-:::info
-**Open dusk to dawn.** Pango is nocturnal, so the gym only really gets going once
-the sun is down. Bring a [headlamp](/pangos/jungle-gym).
-:::
+!!! info "Open dusk to dawn"
+    Pango is nocturnal, so the gym only really gets going once the sun is down.
+    Bring a [headlamp](/pangos/jungle-gym).
 
-:::tip
-Rolling into a ball counts as a dismount. Style points awarded for tightness.
-:::
+!!! tip
+    Rolling into a ball counts as a dismount. Style points awarded for tightness.
 
-:::note
-Scales are self-cleaning. Please do not polish the pangolin.
-:::
+!!! note
+    Scales are self-cleaning. Please do not polish the pangolin.
 
-:::warning
-The high bars get slippery after the 1,000th ant. Chalk up first.
-:::
+!!! warning "Chalk up first"
+    The high bars get slippery after the 1,000th ant.
 
-:::danger
-Do **not** unroll a curled pangolin. It can wait you out for hours, and it will:
+!!! danger "Do not unroll a pangolin"
+    Do **not** unroll a curled pangolin. It can wait you out for hours, and it
+    will:
 
-- ignore you completely
-- win
+    - ignore you completely
+    - win
 
-Seriously. Just leave a few ants and back away.
-:::
+    Seriously. Just leave a few ants and back away.
 
-## Come play
+## Hidden hatches
 
-:::btn
-[Enter the jungle gym](/pangos/jungle-gym)
-:::
+Some equipment only opens when Pango pokes it. Collapsible callouts, one closed
+and one open by default, with nested content to prove the body still parses:
+
+??? note "What's behind the loose scale?"
+    A spare snack and a folded map of every air vent. Standard pangolin
+    contingency planning.
+
+???+ warning "Read before the high bars"
+    Chalk first. The fall is short but the somersault is involuntary.
+
+    ```bash
+    # the only safe descent Pango trusts
+    curl --into-a-ball
+    ```
 
 ## Mascot shot
 

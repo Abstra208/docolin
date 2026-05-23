@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-If you discover a security vulnerability in docolin, please email **security@docolin.com**.
+If you discover a security vulnerability in docolin, please email **<security@docolin.com>**.
 
 The mailbox is hosted on Proton Mail, so:
 
