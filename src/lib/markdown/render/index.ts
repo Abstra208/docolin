@@ -1,7 +1,9 @@
 import { unified } from "unified";
 import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import remarkRehype from "remark-rehype";
+import rehypeKatex from "rehype-katex";
 import rehypeStringify from "rehype-stringify";
 import { visit } from "unist-util-visit";
 import { h, s } from "hastscript";
@@ -193,6 +195,7 @@ export function createMarkdownRenderer(highlight: Highlight): (source: string) =
   const processor = unified()
     .use(remarkParse)
     .use(remarkGfm)
+    .use(remarkMath)
     .use(remarkDocomd)
     .use(remarkTabGroup)
     .use(remarkAttrList)
@@ -205,6 +208,7 @@ export function createMarkdownRenderer(highlight: Highlight): (source: string) =
         docoTabbedSet: tabbedSetHandler,
       },
     })
+    .use(rehypeKatex)
     .use(rehypeButtons)
     .use(rehypeExternalLinks)
     .use(rehypeTaskLists)

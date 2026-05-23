@@ -17,6 +17,7 @@ import pangoWelcome from "./pango/welcome.md?raw";
 import pangoText from "./pango/text.md?raw";
 import pangoCode from "./pango/code.md?raw";
 import pangoTables from "./pango/tables.md?raw";
+import pangoMath from "./pango/math.md?raw";
 import pangoAdmonitions from "./pango/admonitions.md?raw";
 import pangoSteps from "./pango/steps.md?raw";
 import pangoCards from "./pango/cards.md?raw";
@@ -38,6 +39,7 @@ const PANGO_PAGES: PangoPage[] = [
   { slug: "text", raw: pangoText },
   { slug: "code", raw: pangoCode },
   { slug: "tables", raw: pangoTables },
+  { slug: "math", raw: pangoMath },
   { slug: "admonitions", raw: pangoAdmonitions },
   { slug: "steps", raw: pangoSteps },
   { slug: "cards", raw: pangoCards },
@@ -66,6 +68,7 @@ const PANGO_SITEMAP = [
       { title: "Text & lists", url: "/pangos/jungle-gym/text" },
       { title: "Code blocks", url: "/pangos/jungle-gym/code" },
       { title: "Tables & more", url: "/pangos/jungle-gym/tables" },
+      { title: "Math (LaTeX)", url: "/pangos/jungle-gym/math" },
     ],
   },
   {

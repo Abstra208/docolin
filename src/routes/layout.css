@@ -1,6 +1,11 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn-svelte/tailwind.css";
+/* KaTeX styles for server-rendered math (remark-math + rehype-katex). Math is
+   rendered to HTML at build/request time, so readers load only this CSS (and the
+   fonts, on demand), never the KaTeX JS. Loaded globally for now; could be scoped
+   to pages that actually contain math later. */
+@import "katex/dist/katex.min.css";
 
 /* Override @fontsource's default `font-display: swap` so the browser holds
    text rendering for up to ~3 seconds waiting for Geist instead of painting

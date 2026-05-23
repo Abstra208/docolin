@@ -7,6 +7,8 @@ import {
 } from "mdast-util-from-markdown";
 import { gfm } from "micromark-extension-gfm";
 import { gfmFromMarkdown } from "mdast-util-gfm";
+import { math } from "micromark-extension-math";
+import { mathFromMarkdown } from "mdast-util-math";
 import { admonitionSyntax } from "./admonition-syntax.ts";
 import { tabSyntax } from "./tab-syntax.ts";
 import { tabFromMarkdown } from "./tab-mdast.ts";
@@ -96,8 +98,13 @@ function exitAdmonition(this: CompileContext, token: Token): void {
     // here for the app's needs.)
     const body = dedentBody(this.sliceSerialize(token));
     const tree = fromMarkdown(body, {
-      extensions: [gfm(), admonitionSyntax, tabSyntax],
-      mdastExtensions: [gfmFromMarkdown(), admonitionFromMarkdown(), tabFromMarkdown()],
+      extensions: [gfm(), math(), admonitionSyntax, tabSyntax],
+      mdastExtensions: [
+        gfmFromMarkdown(),
+        mathFromMarkdown(),
+        admonitionFromMarkdown(),
+        tabFromMarkdown(),
+      ],
     });
     node.children = tree.children as (BlockContent | DefinitionContent)[];
   }

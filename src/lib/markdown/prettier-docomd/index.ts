@@ -7,6 +7,8 @@ import { gfm } from "micromark-extension-gfm";
 import { gfmFromMarkdown, gfmToMarkdown } from "mdast-util-gfm";
 import { frontmatter } from "micromark-extension-frontmatter";
 import { frontmatterFromMarkdown, frontmatterToMarkdown } from "mdast-util-frontmatter";
+import { math } from "micromark-extension-math";
+import { mathFromMarkdown, mathToMarkdown } from "mdast-util-math";
 import {
   admonitionSyntax,
   admonitionFromMarkdown,
@@ -39,10 +41,11 @@ export const parsers: Record<string, Parser<Nodes>> = {
     astFormat: AST_FORMAT,
     parse(text: string): Nodes {
       return fromMarkdown(text, {
-        extensions: [frontmatter(["yaml"]), gfm(), admonitionSyntax, tabSyntax],
+        extensions: [frontmatter(["yaml"]), gfm(), math(), admonitionSyntax, tabSyntax],
         mdastExtensions: [
           frontmatterFromMarkdown(["yaml"]),
           gfmFromMarkdown(),
+          mathFromMarkdown(),
           admonitionFromMarkdown(),
           tabFromMarkdown(),
         ],
@@ -63,6 +66,7 @@ export const printers: Record<string, Printer<Nodes>> = {
         extensions: [
           frontmatterToMarkdown(["yaml"]),
           gfmToMarkdown(),
+          mathToMarkdown(),
           admonitionToMarkdown(),
           tabToMarkdown(),
         ],

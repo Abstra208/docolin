@@ -320,3 +320,21 @@ describe("icon shortcodes", () => {
     expect(await render("Write `:rocket:` literally.\n")).toContain(":rocket:");
   });
 });
+
+describe("math (LaTeX)", () => {
+  it("renders inline math with KaTeX (HTML + MathML)", async () => {
+    const html = await render("Energy $E = mc^2$ here.\n");
+    expect(html).toContain('class="katex"');
+    expect(html).toContain("<math"); // MathML for accessibility
+  });
+
+  it("renders block math as a centered display block", async () => {
+    expect(await render("$$\n\\int_0^1 x \\, dx\n$$\n")).toContain("katex-display");
+  });
+
+  it("renders math inside a callout", async () => {
+    const html = await render("!!! note\n    The sum $\\sum_k k$ matters.\n");
+    expect(html).toContain("border-foreground/20");
+    expect(html).toContain("katex");
+  });
+});
