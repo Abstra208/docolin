@@ -509,3 +509,98 @@ html {
     display: inline-flex;
   }
 }
+
+/* Footnotes (remark-gfm) + the shared hovercard popover. Unlayered so they win over
+   the .prose typography utilities (utilities beat @layer base regardless of
+   specificity). */
+.footnotes {
+  margin-top: 2.5rem;
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
+}
+.prose [data-footnote-backref] {
+  text-decoration: none;
+}
+/* Enlarge the footnote marker's hit area (the superscript number alone is a tiny
+   hover/tap target) and show a muted background on hover so it reads as a target. */
+.prose [data-footnote-ref] {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 600;
+  padding: 0.2em 0.45em;
+  margin: 0 -0.1em;
+  transition: background-color 150ms;
+}
+.prose [data-footnote-ref]:hover,
+.prose [data-footnote-ref]:focus-visible {
+  background: var(--muted);
+}
+
+/* Appended to <body>, positioned by Floating UI (position: fixed). */
+.doco-hovercard {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 50;
+  max-width: 24rem;
+  border: 1px solid var(--border);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow:
+    0 4px 16px -4px rgb(0 0 0 / 0.18),
+    0 2px 6px -2px rgb(0 0 0 / 0.12);
+  padding: 0.75rem 0.875rem;
+  font-size: 1rem; /* match prose body text */
+  line-height: 1.6;
+}
+.doco-hovercard[hidden] {
+  display: none;
+}
+.doco-hovercard p {
+  margin: 0;
+}
+.doco-hovercard p + p {
+  margin-top: 0.5rem;
+}
+.doco-hovercard a {
+  color: var(--primary);
+  text-decoration: underline;
+}
+
+/* Code annotations: a `(N)` marker becomes a small numbered badge in the code; the
+   ordered list below the block stays visible as the panel + click-popover source. */
+.code-annotation {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.45em;
+  height: 1.45em;
+  padding: 0 0.35em;
+  margin: 0 0.15em 0 0.7em;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1;
+  vertical-align: middle;
+  cursor: pointer;
+  transition: background-color 150ms;
+}
+/* Darken while open (aria-expanded) so it reads as the active marker; the number
+   stays. */
+.code-annotation:hover,
+.code-annotation:focus-visible,
+.code-annotation[aria-expanded="true"] {
+  background: color-mix(in oklch, var(--primary) 80%, black);
+}
+
+/* Internal-link hovercard: the target doco's title + description. */
+.doco-link-preview-title {
+  font-weight: 600;
+  color: var(--foreground);
+}
+.doco-link-preview p {
+  color: var(--muted-foreground);
+}

@@ -67,3 +67,26 @@ An unknown language, so Pango can confirm it falls back without faceplanting:
 ```doesnotexist
 ?? this grammar climbed the wrong bar ??
 ```
+
+## Annotations
+
+Mark a line with `(n)` and follow the block with a numbered list. The marker becomes
+a little badge; click it for the note. Add `!` (`(n)!`) to strip the surrounding
+comment so only the badge shows. A real call like `listen(8080)` is left alone.
+
+```bash
+sudo dnf install rpmfusion-free-release  # (1)!
+sudo dnf install akmod-nvidia            # (2)!
+sudo akmods --force                      # (3)!
+```
+
+1. Enables the RPM Fusion repo, where the driver lives.
+
+2. Pulls the driver as an akmod, so it rebuilds for each new kernel. Confirm it
+   landed:
+
+   ```bash
+   rpm -qa | grep akmod-nvidia
+   ```
+
+3. Builds the module for the running kernel now, instead of waiting for a reboot.

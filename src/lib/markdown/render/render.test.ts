@@ -439,3 +439,65 @@ describe("charts edge cases", () => {
     expect(html).toContain('data-doco-chart="line"');
   });
 });
+
+describe("footnotes", () => {
+  it("renders gfm footnote references and a footnotes section", async () => {
+    const html = await render("A claim.[^1]\n\n[^1]: The source.\n");
+    expect(html).toContain("data-footnote-ref"); // inline marker (hover-preview hook)
+    expect(html).toContain('class="footnotes"'); // bottom section
+    expect(html).toContain("The source.");
+  });
+});
+
+describe("code annotations", () => {
+  it("turns (N) markers into buttons when a matching list follows", async () => {
+    const html = await render(
+      "```bash\nrun it  # (1)\nstop it  # (2)\n```\n\n1. starts\n2. stops\n",
+    );
+    expect(html).toContain("code-annotation"); // the badge button
+    expect(html).toContain('data-annotation-ref="ca-0-1"');
+    expect(html).toContain("code-annotations"); // the panel (popover source)
+    expect(html).toContain('id="ca-0-1"');
+    expect(html).toContain('id="ca-0-2"');
+  });
+
+  it("leaves a normal list after a code block alone", async () => {
+    const html = await render("```bash\nrun\n```\n\n1. just a list item\n");
+    expect(html).not.toContain("code-annotation");
+  });
+
+  it("does not treat a function call like foo(1) as a marker", async () => {
+    const html = await render("```js\nfoo(1);\n```\n\n1. a note\n");
+    expect(html).not.toContain("code-annotation");
+  });
+
+  it("hides the annotation list (revealed via the popover, kept for screen readers)", async () => {
+    const html = await render("```bash\nrun  # (1)\n```\n\n1. note\n");
+    expect(html).toContain("sr-only"); // list is in the DOM but visually hidden
+  });
+
+  it("strips the comment with the (N)! variant", async () => {
+    const html = await render("```text\nfoo # (1)!\n```\n\n1. note\n");
+    expect(html).toContain("code-annotation"); // badge present
+    expect(html).not.toContain("(1)"); // marker text consumed
+    expect(html).not.toContain("foo #"); // the comment delimiter stripped, badge stands alone
+  });
+});
+
+describe("footnote reference edge cases", () => {
+  // Count non-overlapping occurrences without a regex (project rule).
+  const count = (haystack: string, needle: string): number => haystack.split(needle).length - 1;
+
+  it("supports the same footnote referenced more than once", async () => {
+    const html = await render("First.[^1] Second.[^1]\n\n[^1]: Shared note.\n");
+    expect(count(html, "data-footnote-ref")).toBe(2); // two markers
+    expect(count(html, 'href="#user-content-fn-1"')).toBe(2); // both point at one definition
+  });
+
+  it("handles a footnote whose definition references another footnote", async () => {
+    const html = await render("Claim.[^a]\n\n[^a]: See also [^b].\n[^b]: The nested note.\n");
+    expect(html).toContain("user-content-fn-a");
+    expect(html).toContain("user-content-fn-b");
+    expect(html).toContain("user-content-fnref-b"); // nested marker lives inside def a
+  });
+});

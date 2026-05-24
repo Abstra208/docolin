@@ -79,6 +79,12 @@ function onCopyClick(event: MouseEvent): void {
   );
 }
 
+/** Mount any chart figures within a subtree immediately (no IntersectionObserver),
+ *  for cloned markup like a footnote/annotation popover that is already visible. */
+export function mountChartsIn(root: ParentNode): void {
+  for (const figure of root.querySelectorAll<HTMLElement>(".doco-chart")) void mountChart(figure);
+}
+
 /** Observe every chart figure so each mounts when first revealed. Call on initial
  *  load and after each client navigation (new pages bring new charts; old ones are
  *  gone, so we rebuild the observer and tear down stale mounts). */

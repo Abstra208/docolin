@@ -44,3 +44,16 @@ Drop any [Lucide](https://lucide.dev/icons) icon inline with `:name:` (kebab nam
 work too). Climb :mountain: to the top, fuel up on :drumstick:, then read the
 :book-open:. A stray colon or a time like 3:30 is left alone, and `:rocket:` in
 code stays literal.
+
+## Footnotes
+
+Pango's boasts come with receipts.[^scales] He also keeps a running tally.[^ants]
+Hover a marker for a preview, or follow it to the list at the bottom. The same
+marker can be reused,[^scales] and a footnote can even reference another.
+
+[^scales]: Pangolins are the only mammals entirely covered in scales.[^keratin]
+
+[^ants]: Up to 70 million ants and termites a year, per pangolin. Citation needed,
+    but Pango insists.
+
+[^keratin]: Those scales are keratin, the same stuff as your fingernails.

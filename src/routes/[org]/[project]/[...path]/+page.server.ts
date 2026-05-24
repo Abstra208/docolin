@@ -1,6 +1,5 @@
 import { error, fail } from "@sveltejs/kit";
 import { and, desc, eq, inArray, like } from "drizzle-orm";
-import matter from "gray-matter";
 import { dev } from "$app/environment";
 import type { Actions, PageServerLoad } from "./$types";
 import { db } from "$lib/server/db";
@@ -10,91 +9,8 @@ import { renderMarkdown, extractDocoToc } from "$lib/server/markdown";
 import { resolveDocoIdentity, resolveProjectBySlug } from "$lib/server/doco-resolve";
 import { fileDeletionRequest, submitReport } from "$lib/server/moderation";
 import { pathFromSourcePath, rebuildPathInSource } from "$lib/doco-urls";
-// Dev-only markdown playground content. Each file under ./pango is one page;
-// ?raw bundles + watches it so editing live-reloads in dev. See the playground
-// branch in `load`.
-import pangoWelcome from "./pango/welcome.md?raw";
-import pangoText from "./pango/text.md?raw";
-import pangoCode from "./pango/code.md?raw";
-import pangoTables from "./pango/tables.md?raw";
-import pangoMath from "./pango/math.md?raw";
-import pangoAdmonitions from "./pango/admonitions.md?raw";
-import pangoSteps from "./pango/steps.md?raw";
-import pangoCards from "./pango/cards.md?raw";
-import pangoAccordion from "./pango/accordion.md?raw";
-import pangoTabs from "./pango/tabs.md?raw";
-import pangoMermaid from "./pango/mermaid.md?raw";
-import pangoCharts from "./pango/charts.md?raw";
-import pangoNesting from "./pango/nesting.md?raw";
-import pangoCrazy from "./pango/crazy.md?raw";
-
-interface PangoPage {
-  slug: string;
-  title: string;
-  description: string | null;
-  content: string;
-}
-
-// Each file is one page; frontmatter is parsed once at module load.
-const PANGO_PAGES: PangoPage[] = [
-  { slug: "welcome", raw: pangoWelcome },
-  { slug: "text", raw: pangoText },
-  { slug: "code", raw: pangoCode },
-  { slug: "tables", raw: pangoTables },
-  { slug: "math", raw: pangoMath },
-  { slug: "admonitions", raw: pangoAdmonitions },
-  { slug: "steps", raw: pangoSteps },
-  { slug: "cards", raw: pangoCards },
-  { slug: "accordion", raw: pangoAccordion },
-  { slug: "tabs", raw: pangoTabs },
-  { slug: "mermaid", raw: pangoMermaid },
-  { slug: "charts", raw: pangoCharts },
-  { slug: "nesting", raw: pangoNesting },
-  { slug: "crazy", raw: pangoCrazy },
-].map(({ slug, raw }) => {
-  const { data, content } = matter(raw);
-  const fm = data as Record<string, unknown>;
-  return {
-    slug,
-    title: typeof fm.title === "string" ? fm.title : slug,
-    description: typeof fm.description === "string" ? fm.description : null,
-    content,
-  };
-});
-
-// Sectioned sidebar nav, which also exercises the viewer's branch (children)
-// rendering. Leaf urls match the page slugs above.
-const PANGO_SITEMAP = [
-  { title: "Welcome", url: "/pangos/jungle-gym/welcome" },
-  {
-    title: "Basics",
-    children: [
-      { title: "Text & lists", url: "/pangos/jungle-gym/text" },
-      { title: "Code blocks", url: "/pangos/jungle-gym/code" },
-      { title: "Tables & more", url: "/pangos/jungle-gym/tables" },
-      { title: "Math (LaTeX)", url: "/pangos/jungle-gym/math" },
-    ],
-  },
-  {
-    title: "Callouts & constructs",
-    children: [
-      { title: "Admonitions", url: "/pangos/jungle-gym/admonitions" },
-      { title: "Steps", url: "/pangos/jungle-gym/steps" },
-      { title: "Cards", url: "/pangos/jungle-gym/cards" },
-      { title: "Accordion", url: "/pangos/jungle-gym/accordion" },
-      { title: "Content tabs", url: "/pangos/jungle-gym/tabs" },
-      { title: "Mermaid diagrams", url: "/pangos/jungle-gym/mermaid" },
-      { title: "Charts", url: "/pangos/jungle-gym/charts" },
-    ],
-  },
-  {
-    title: "Edge cases",
-    children: [
-      { title: "Nesting & edge cases", url: "/pangos/jungle-gym/nesting" },
-      { title: "Crazy nesting", url: "/pangos/jungle-gym/crazy" },
-    ],
-  },
-];
+// Dev-only markdown playground registry, shared with the link-preview endpoint.
+import { PANGO_PAGES, PANGO_SITEMAP } from "./pango/pages.ts";
 
 // Public doco viewer. URL shape per docs/frontmatter-format.md:
 //   /{org-or-user}/{project}/{path-from-project-root}

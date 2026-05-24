@@ -13,6 +13,7 @@
   import { setupContentTabs, applyTabPreference } from "$lib/markdown/content-tabs";
   import { setupMermaid, renderMermaid } from "$lib/markdown/mermaid";
   import { setupCharts, renderCharts } from "$lib/markdown/charts";
+  import { setupMarkdownPopovers } from "$lib/markdown/popovers";
   // ?url asks Vite for the asset's final hashed URL string. The latin range
   // covers EN + DE traffic (umlauts and ß live in U+0000-00FF); the ext and
   // cyrillic ranges fetch lazily on demand. Preloading only the latin file
@@ -47,6 +48,7 @@
     const teardownTabs = setupContentTabs();
     const teardownMermaid = setupMermaid();
     const teardownCharts = setupCharts();
+    const teardownPopovers = setupMarkdownPopovers();
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
       teardownCodeCopy();
@@ -54,6 +56,7 @@
       teardownTabs();
       teardownMermaid();
       teardownCharts();
+      teardownPopovers();
     };
   });
 

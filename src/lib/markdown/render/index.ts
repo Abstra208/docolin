@@ -18,6 +18,7 @@ import { tabbedSetHandler } from "./tabs.ts";
 import { rehypeIconShortcodes } from "./icon-shortcode.ts";
 import { remarkCode, codeHandler, type Highlight } from "./code.ts";
 import { chartHandler } from "./chart.ts";
+import { rehypeCodeAnnotations } from "./code-annotations.ts";
 
 // docolin's markdown renderer, built on remark/rehype + the docomd syntax. The
 // pipeline is isomorphic; only the shiki highlighter differs (static on the
@@ -221,6 +222,7 @@ export function createMarkdownRenderer(highlight: Highlight): (source: string) =
     .use(rehypeExternalLinks)
     .use(rehypeTaskLists)
     .use(rehypeIconShortcodes)
+    .use(rehypeCodeAnnotations)
     .use(rehypeStringify);
 
   return async (source: string): Promise<string> => {
