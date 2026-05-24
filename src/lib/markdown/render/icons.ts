@@ -10,6 +10,7 @@ import {
   Lightbulb,
   OctagonAlert,
   Pencil,
+  Plus,
   TextSelect,
   TriangleAlert,
 } from "lucide";
@@ -35,6 +36,7 @@ const ICONS = {
   "chevron-down": ChevronDown,
   copy: Copy,
   check: Check,
+  plus: Plus,
   "text-select": TextSelect,
   "arrow-right": ArrowRight,
 } satisfies Record<string, LucideIcon>;

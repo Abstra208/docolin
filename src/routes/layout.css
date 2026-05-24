@@ -575,14 +575,12 @@ html {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 1.45em;
-  height: 1.45em;
-  padding: 0 0.35em;
+  width: 1.5em;
+  height: 1.5em;
   margin: 0 0.15em 0 0.7em;
   background: var(--primary);
   color: var(--primary-foreground);
   font-size: 0.8rem;
-  font-weight: 600;
   line-height: 1;
   vertical-align: middle;
   cursor: pointer;

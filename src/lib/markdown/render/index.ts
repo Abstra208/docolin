@@ -11,14 +11,20 @@ import { toString as mdastToString } from "mdast-util-to-string";
 import DOMPurify from "isomorphic-dompurify";
 import type { Root as HastRoot, Element } from "hast";
 import type { Root as MdastRoot } from "mdast";
-import { remarkDocomd, remarkAttrList, remarkTabGroup, remarkChart } from "$lib/markdown/docomd";
+import {
+  remarkDocomd,
+  remarkAttrList,
+  remarkBlockAttrList,
+  remarkTabGroup,
+  remarkChart,
+} from "$lib/markdown/docomd";
 import { slugify } from "$lib/slug";
 import { admonitionHandler } from "./admonition.ts";
 import { tabbedSetHandler } from "./tabs.ts";
 import { rehypeIconShortcodes } from "./icon-shortcode.ts";
 import { remarkCode, codeHandler, type Highlight } from "./code.ts";
 import { chartHandler } from "./chart.ts";
-import { rehypeCodeAnnotations } from "./code-annotations.ts";
+import { rehypeAnnotations } from "./annotations.ts";
 
 // docolin's markdown renderer, built on remark/rehype + the docomd syntax. The
 // pipeline is isomorphic; only the shiki highlighter differs (static on the
@@ -207,6 +213,7 @@ export function createMarkdownRenderer(highlight: Highlight): (source: string) =
     .use(remarkTabGroup)
     .use(remarkAttrList)
     .use(remarkChart)
+    .use(remarkBlockAttrList)
     .use(remarkHeadingIds)
     .use(remarkCode, highlight)
     .use(remarkRehype, {
@@ -222,7 +229,7 @@ export function createMarkdownRenderer(highlight: Highlight): (source: string) =
     .use(rehypeExternalLinks)
     .use(rehypeTaskLists)
     .use(rehypeIconShortcodes)
-    .use(rehypeCodeAnnotations)
+    .use(rehypeAnnotations)
     .use(rehypeStringify);
 
   return async (source: string): Promise<string> => {

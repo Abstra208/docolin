@@ -57,3 +57,14 @@ marker can be reused,[^scales] and a footnote can even reference another.
     but Pango insists.
 
 [^keratin]: Those scales are keratin, the same stuff as your fingernails.
+
+## Annotations anywhere
+
+Annotations aren't just for code blocks. Tag any block with `{ .annotate }`, drop a
+`(1)` marker in it, and list the notes below. (1)
+{ .annotate }
+
+1. A note holds rich Markdown: **bold**, `code`, and even a nested annotation. (1)
+   { .annotate }
+
+   1. All the way down. Pango approves.

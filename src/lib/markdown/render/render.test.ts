@@ -501,3 +501,26 @@ describe("footnote reference edge cases", () => {
     expect(html).toContain("user-content-fnref-b"); // nested marker lives inside def a
   });
 });
+
+describe("annotations anywhere ({ .annotate })", () => {
+  it("annotates a prose block tagged with { .annotate }", async () => {
+    const html = await render("Some prose (1) here.\n{ .annotate }\n\n1. The note.\n");
+    expect(html).toContain("code-annotation"); // the badge
+    expect(html).toContain('data-annotation-ref="ca-0-1"');
+    expect(html).toContain("code-annotations"); // hidden panel
+    expect(html).not.toContain("{ .annotate }"); // attr-list line consumed
+  });
+
+  it("leaves plain prose with a (1) alone (no { .annotate })", async () => {
+    const html = await render("It costs one dollar (1) only.\n\n1. a list item\n");
+    expect(html).not.toContain("code-annotation");
+  });
+
+  it("supports a nested annotation (.annotate on a list item)", async () => {
+    const html = await render(
+      "Outer (1) text.\n{ .annotate }\n\n1.  Inner (1) note.\n    { .annotate }\n\n    1.  Deepest.\n",
+    );
+    expect(html).toContain('id="ca-0-1"'); // outer annotation item
+    expect(html).toContain('id="ca-1-1"'); // nested annotation item
+  });
+});

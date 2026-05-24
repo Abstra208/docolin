@@ -24,7 +24,7 @@ export { tabSyntax } from "./tab-syntax.ts";
 export { tabFromMarkdown } from "./tab-mdast.ts";
 export { tabToMarkdown } from "./tab-to-markdown.ts";
 export { remarkTabGroup } from "./tab-group.ts";
-export { remarkAttrList } from "./attr-list.ts";
+export { remarkAttrList, remarkBlockAttrList } from "./attr-list.ts";
 export { remarkChart } from "./chart.ts";
 export type { ChartSpec, ChartType, DocoChart } from "./chart.ts";
 

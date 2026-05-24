@@ -1,13 +1,17 @@
 import type { Element, ElementContent, Parent, Root, Text } from "hast";
 import { h } from "hastscript";
 import { SKIP, visit } from "unist-util-visit";
+import { iconHast } from "./icons.ts";
 
-// MkDocs-style code annotations: a `(N)` marker in a code block (best placed in a
-// comment) plus an ordered list immediately after the block. Each marker becomes a
-// small numbered button; the list stays visible as the no-JS annotation panel and is
-// the click-popover source (wired in popovers.ts). A block is only converted when its
-// markers line up with the following list, so a stray `(1)` in real code, or a normal
-// list that just happens to follow a code block, is left untouched.
+// MkDocs-style annotations. A `(N)` marker plus an ordered list right after the block
+// turns the marker into a small numbered badge; the list is hidden and revealed by
+// clicking the badge (popover, wired in popovers.ts). Two ways to opt a block in:
+//   - a code block (`.code-block`): markers go in the code, best inside a comment;
+//   - any other block tagged `{ .annotate }` (-> `.annotate`): markers go in its text.
+// Nesting works for free: an annotation list item can itself be `.annotate` with its
+// own following list. A block is only converted when its markers line up with the
+// list, so a stray `(1)` in real code/prose, or a normal list after a block, is left
+// alone.
 
 function hasClass(node: Element, name: string): boolean {
   const cls = node.properties.className;
@@ -105,6 +109,8 @@ function splitMarkers(value: string, max: number): (string | number)[] | null {
   return out;
 }
 
+// All badges show a plus icon (a "click me" affordance); the number is internal,
+// mapping the badge to its note in the hidden list.
 function annotationButton(id: string, number: number): Element {
   return h(
     "button",
@@ -115,16 +121,24 @@ function annotationButton(id: string, number: number): Element {
       "aria-label": `Annotation ${String(number)}`,
       "aria-expanded": "false",
     },
-    String(number),
+    [iconHast("plus", "size-3.5")],
   );
 }
 
-// Replaces every `(N)` marker in the block's text with a button. Returns the set of
-// numbers actually used.
-function annotateCode(block: Element, id: string, max: number): Set<number> {
+// Replaces every `(N)` marker in the block's text with a badge. Returns the set of
+// numbers actually used. `skipInlineCode` ignores text inside inline <code> (so a
+// literal `(1)` example in prose isn't a marker); code blocks pass false, since
+// their markers live in the highlighted code.
+function annotateMarkers(
+  block: Element,
+  id: string,
+  max: number,
+  skipInlineCode: boolean,
+): Set<number> {
   const used = new Set<number>();
   visit(block, "text", (textNode: Text, index, parent) => {
     if (parent === undefined || index === undefined) return;
+    if (skipInlineCode && parent.tagName === "code") return;
     const segments = splitMarkers(textNode.value, max);
     if (segments === null) return;
     const replacement: ElementContent[] = segments.map((segment) => {
@@ -138,14 +152,15 @@ function annotateCode(block: Element, id: string, max: number): Set<number> {
   return used;
 }
 
-/** rehype: turn `(N)` markers in a code block (with a following ordered list) into
- *  numbered annotation buttons, and mark the list as the annotation panel. */
-export function rehypeCodeAnnotations() {
+/** rehype: turn `(N)` markers in a code block or `{ .annotate }` block (each with a
+ *  following ordered list) into numbered badges, and hide the list as the popover
+ *  source. Handles nested annotations via the same traversal. */
+export function rehypeAnnotations() {
   return (tree: Root): undefined => {
     let block = 0;
     visit(tree, "element", (node, index, parent) => {
       if (parent === undefined || index === undefined) return;
-      if (!hasClass(node, "code-block")) return;
+      if (!hasClass(node, "code-block") && !hasClass(node, "annotate")) return;
       const list = nextElement(parent, index);
       if (list?.tagName !== "ol") return;
 
@@ -155,7 +170,7 @@ export function rehypeCodeAnnotations() {
       if (items.length === 0) return;
 
       const id = `ca-${String(block)}`;
-      const used = annotateCode(node, id, items.length);
+      const used = annotateMarkers(node, id, items.length, !hasClass(node, "code-block"));
       if (used.size === 0) return; // no real markers: leave the list as a normal list
 
       block += 1;

@@ -239,3 +239,55 @@ Long category labels that have to share the axis:
 | Yet another long distro three | 54        |
 
 { .chart type=bar horizontal legend=false title="Long labels" }
+
+## An annotation in every box
+
+Annotations via `{ .annotate }` aren't just for code. A block can hold more than one,
+here (1) and here (2), while a literal `(3)` written in `code` stays put.
+{ .annotate }
+
+1. The first note.
+2. The second, with `code`, **bold**, and a [link](/pangos/jungle-gym/text).
+
+Inside a callout:
+
+!!! tip
+    A tip body with a marker (1) tucked in it.
+    { .annotate }
+
+    1. The note lives inside the callout.
+
+Inside a tab, next to one without:
+
+=== "Annotated"
+    Tab content with a marker (1).
+    { .annotate }
+
+    1. Annotated inside a tab panel.
+
+=== "Plain"
+    Nothing to see here.
+
+Three levels deep, each note hosting the next:
+
+Top (1).
+{ .annotate }
+
+1. Middle (1).
+   { .annotate }
+
+   1. Bottom (1).
+      { .annotate }
+
+      1. The deepest note. Pango had to climb for this one.
+
+A note that carries rich content (a whole code block):
+
+Run the build first (1).
+{ .annotate }
+
+1. Like so:
+
+   ```bash
+   bun run build
+   ```
