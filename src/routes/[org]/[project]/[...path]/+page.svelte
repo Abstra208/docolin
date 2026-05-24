@@ -39,6 +39,8 @@
   let capsForDocoId = "";
   $effect(() => {
     const id = doco.id;
+    // The dev playground has no DB row behind it; never hit a doco-id-keyed endpoint.
+    if (data.playground) return;
     if (!session.loaded || session.value.dbUser === null || capsForDocoId === id) return;
     capsForDocoId = id;
     canModerate = false;

@@ -139,6 +139,11 @@ export const load: PageServerLoad = async ({ params, setHeaders, isDataRequest }
       { kind: "external", name: "Pango", username: null, url: null },
     ];
     return {
+      // Dev-only local-file playground: no DB row backs these pages, so the viewer
+      // must skip every doco-id-keyed API call (capabilities, etc.). Their synthetic
+      // ids aren't valid UUIDs and would 500 the query, but more to the point the
+      // gym should never touch the database at all.
+      playground: true,
       org: { slug: "pangos", displayName: "Pango" },
       project: { slug: "jungle-gym", displayName: "Pango's jungle gym" },
       gitSource: { repoUrl: "", defaultBranch: "main" },
@@ -305,6 +310,7 @@ export const load: PageServerLoad = async ({ params, setHeaders, isDataRequest }
   ]);
 
   return {
+    playground: false,
     org: { slug: proj.orgSlug, displayName: proj.orgDisplayName },
     project: {
       slug: proj.projectSlug,
