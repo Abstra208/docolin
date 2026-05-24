@@ -3,9 +3,49 @@
 # recursive { title, url?, children? } with url xor children per entry.
 
 sitemap:
-  - title: Reference
+  - title: Getting started
     children:
-      - title: Frontmatter format
-        url: /docolin/docolin/frontmatter-format
+      - title: Overview
+        url: /docolin/docolin/authoring/overview
+      - title: Your first doco
+        url: /docolin/docolin/authoring/quickstart
+      - title: Frontmatter
+        url: /docolin/docolin/authoring/frontmatter
+  - title: The basics
+    children:
+      - title: Text, lists, and links
+        url: /docolin/docolin/authoring/text-and-lists
+      - title: Tables
+        url: /docolin/docolin/authoring/tables
+      - title: Code blocks
+        url: /docolin/docolin/authoring/code-blocks
+  - title: Rich blocks
+    children:
+      - title: Callouts
+        url: /docolin/docolin/authoring/callouts
+      - title: Content tabs
+        url: /docolin/docolin/authoring/tabs
+      - title: Cards
+        url: /docolin/docolin/authoring/cards
+      - title: Steps & accordion
+        url: /docolin/docolin/authoring/steps-and-accordion
+  - title: Visuals & math
+    children:
+      - title: Diagrams
+        url: /docolin/docolin/authoring/diagrams
+      - title: Charts
+        url: /docolin/docolin/authoring/charts
+      - title: Math
+        url: /docolin/docolin/authoring/math
+  - title: Depth & craft
+    children:
+      - title: Footnotes & annotations
+        url: /docolin/docolin/authoring/footnotes-and-annotations
+      - title: Links & navigation
+        url: /docolin/docolin/authoring/links-and-navigation
+      - title: Writing well
+        url: /docolin/docolin/authoring/writing-well
+  - title: Policies
+    children:
       - title: Moderation policy
         url: /docolin/docolin/moderation-policy
