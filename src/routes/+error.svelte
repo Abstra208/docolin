@@ -2,7 +2,7 @@
   import { page } from "$app/state";
   import { m } from "$paraglide/messages";
   import { localizeHref } from "$paraglide/runtime";
-  import Navbar from "$lib/components/Navbar.svelte";
+  import DocoViewerNavbar from "$lib/components/DocoViewerNavbar.svelte";
   import Footer from "$lib/components/Footer.svelte";
   import { Button } from "$lib/components/ui/button";
   import { SITE_REPO } from "$lib/site";
@@ -28,7 +28,7 @@
 </svelte:head>
 
 <div class="bg-background text-foreground flex min-h-screen flex-col">
-  <Navbar />
+  <DocoViewerNavbar kindSegments={[]} />
 
   <main class="flex flex-1 items-center justify-center px-6 pt-32 pb-24">
     <div class="mx-auto w-full max-w-2xl">

@@ -190,24 +190,40 @@ async function addVersionToExistingDoco(
   ctx: ProcessFileContext,
 ): Promise<ProcessFileResult> {
   return await db.transaction(async (tx) => {
-    // Find the next version number. Could also `MAX(version_number) + 1`, but
-    // the unique index on (doco_id, version_number) means an explicit count
-    // is simpler than racing with concurrent writes for now.
-    const [{ next }] = await tx
-      .select({ next: sql<number>`COALESCE(MAX(${versions.versionNumber}), 0) + 1` })
+    // Re-syncing the same commit updates that commit's version in place rather
+    // than stacking a duplicate version row with the same SHA. This keeps a
+    // commit mapped to exactly one version (so `@sha` lookups stay
+    // unambiguous), makes dev force-resyncs idempotent, and preserves the
+    // version's id, so stamps and the Pango Score stay attached across a
+    // re-process instead of orphaning onto a dead row.
+    const existing = await tx
+      .select({ id: versions.id })
       .from(versions)
-      .where(eq(versions.docoId, docoId));
+      .where(and(eq(versions.docoId, docoId), eq(versions.commitSha, ctx.ref)))
+      .limit(1);
 
-    const versionId = await insertVersionRow(
-      tx,
-      docoId,
-      next,
-      ctx.ref,
-      ctx.versionTag,
-      parsed,
-      convertedBody,
-      sitemap,
-    );
+    let versionId: string;
+    if (existing.length > 0) {
+      versionId = existing[0].id;
+      await updateVersionRow(tx, versionId, ctx.versionTag, parsed, convertedBody, sitemap);
+    } else {
+      // Explicit count rather than racing; the unique (doco_id, version_number)
+      // index protects against a concurrent writer.
+      const [{ next }] = await tx
+        .select({ next: sql<number>`COALESCE(MAX(${versions.versionNumber}), 0) + 1` })
+        .from(versions)
+        .where(eq(versions.docoId, docoId));
+      versionId = await insertVersionRow(
+        tx,
+        docoId,
+        next,
+        ctx.ref,
+        ctx.versionTag,
+        parsed,
+        convertedBody,
+        sitemap,
+      );
+    }
 
     await tx
       .update(docos)
@@ -266,6 +282,48 @@ async function insertVersionRow(
     .returning({ id: versions.id });
 
   return row.id;
+}
+
+// Re-process an existing version's content in place: same id, versionNumber,
+// commitSha, publishedAt, and verification aggregate; only the synced content
+// and frontmatter-derived fields change. Mirrors insertVersionRow's field set.
+async function updateVersionRow(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  versionId: string,
+  versionTag: string | null,
+  parsed: ParsedDoco,
+  convertedBody: string,
+  sitemap: Sitemap | null,
+): Promise<void> {
+  const fm = parsed.frontmatter;
+  const doc = fm.docolin;
+  const timeEstimate = parsed.timeEstimate;
+
+  await tx
+    .update(versions)
+    .set({
+      versionTag,
+      kind: toLtree(doc.kind),
+      type: doc.type,
+      title: fm.title,
+      description: fm.description ?? null,
+      appliesTo: doc.applies_to,
+      status: doc.status,
+      language: doc.language,
+      difficulty: doc.difficulty ?? null,
+      timeEstimateMinMinutes: timeEstimate === null ? null : timeEstimate.minMinutes,
+      timeEstimateMaxMinutes: timeEstimate === null ? null : timeEstimate.maxMinutes,
+      aliases: doc.aliases,
+      prevLink: doc.prev ?? null,
+      nextLink: doc.next ?? null,
+      supersededBy: doc.superseded_by ?? null,
+      references: doc.references,
+      authors: parsed.authors,
+      sitemap,
+      bodyText: convertedBody,
+      bodyFormat: "commonmark",
+    })
+    .where(eq(versions.id, versionId));
 }
 
 function makeLinkRewriter(
