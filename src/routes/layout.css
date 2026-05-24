@@ -249,6 +249,11 @@ html {
     font-family: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Consolas, monospace;
     font-size: 0.85rem;
     line-height: 1.5;
+    /* Long lines wrap instead of forcing a horizontal scrollbar across the block.
+     * pre-wrap preserves indentation; overflow-wrap also breaks an unbreakable
+     * token (a long URL or base64 blob) so nothing ever overflows sideways. */
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
   /* shiki gives the <pre> tabindex=0 (for keyboard scroll); suppress its focus
    * outline, it reads as noise around the block in both light and dark. */

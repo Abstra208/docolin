@@ -54,7 +54,11 @@ const ZERO_COUNTS: SyncRunCounts = {
   errored: 0,
 };
 
-export async function syncProject(projectId: string, bucket: R2Bucket): Promise<SyncRunResult> {
+export async function syncProject(
+  projectId: string,
+  bucket: R2Bucket,
+  force = false,
+): Promise<SyncRunResult> {
   // Load everything in one query. innerJoin on git_sources means we get a
   // row back only if the project has a git source attached.
   const rows = await db
@@ -110,7 +114,10 @@ export async function syncProject(projectId: string, bucket: R2Bucket): Promise<
     .set({ syncStatus: "syncing", updatedAt: new Date() })
     .where(eq(gitSources.id, r.gitSourceId));
 
-  if (r.lastSyncedCommit === null) {
+  // A forced run (dev-mode manual resync) re-processes the whole tree even when
+  // HEAD hasn't moved, so renderer / pipeline changes take effect without pushing
+  // a no-op commit.
+  if (r.lastSyncedCommit === null || force) {
     return await runInitialSync({
       bucket,
       projectId: r.projectId,
@@ -362,6 +369,7 @@ async function processFiles(
     versionTag,
     orgSlug: ctx.orgSlug,
     projectSlug: ctx.projectSlug,
+    subpath: ctx.subpath,
     globalSitemap,
   };
 

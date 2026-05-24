@@ -9,6 +9,7 @@ import { convertBody } from "./body-pipeline";
 import { makeImageArchiver, type SyncFileErrorRecord } from "./media-archive";
 import { resolveDocoSitemap, type GlobalSitemapResult } from "./sitemap";
 import { resolveRelativePath } from "./path-resolve";
+import { pathFromSourcePath } from "$lib/doco-urls";
 import type { Sitemap } from "./sitemap-schema";
 
 // Per-file processing for a single doco. Called by the sync orchestrator for
@@ -31,6 +32,9 @@ export interface ProcessFileContext {
   versionTag: string | null;
   orgSlug: string;
   projectSlug: string;
+  // The git source's docs subpath (e.g. "docs"), stripped from URLs. Needed so
+  // relative links resolve to the same path-from-project-root the viewer serves.
+  subpath: string | null;
   globalSitemap: GlobalSitemapResult;
 }
 
@@ -87,7 +91,7 @@ export async function processFile(
     docoPath: filePath,
     onError: (err) => assetErrors.push(err),
   });
-  const linkRewriter = makeLinkRewriter(filePath, ctx.orgSlug, ctx.projectSlug);
+  const linkRewriter = makeLinkRewriter(filePath, ctx.orgSlug, ctx.projectSlug, ctx.subpath);
   const convertedBody = await convertBody(parsed.body, {
     rewriteImageUrl: imageArchiver,
     rewriteRelativeLink: linkRewriter,
@@ -268,12 +272,15 @@ function makeLinkRewriter(
   docoPath: string,
   orgSlug: string,
   projectSlug: string,
+  subpath: string | null,
 ): (sourceUrl: string) => string {
   return (sourceUrl: string) => {
-    // body-pipeline.ts only calls this for relative `.md` links already.
-    // Strip the extension and rewrite to the canonical docolin URL.
+    // body-pipeline.ts only calls this for relative `.md` links already. Resolve
+    // against the doco's file path, then map to the public path-from-project-root,
+    // which drops the docs subpath (e.g. "docs/") and the ".md", matching the URL
+    // the viewer serves. Without the subpath strip, links 404 under /…/docs/….
     const resolved = resolveRelativePath(docoPath, sourceUrl);
-    const withoutExt = resolved.endsWith(".md") ? resolved.slice(0, -3) : resolved;
-    return `/${orgSlug}/${projectSlug}/${withoutExt}`;
+    const pathFromRoot = pathFromSourcePath(resolved, subpath);
+    return `/${orgSlug}/${projectSlug}/${pathFromRoot}`;
   };
 }

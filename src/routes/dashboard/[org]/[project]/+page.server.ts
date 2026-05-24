@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import type { Actions, PageServerLoad } from "./$types";
 import { db } from "$lib/server/db";
 import { orgs, orgMembers, projects } from "$lib/server/db/schema";
+import { dev } from "$app/environment";
 import { syncProject } from "$lib/sync/run";
 
 // Shell for /dashboard/[org]/[project]. Project + sync state + docos load
@@ -45,7 +46,9 @@ export const actions = {
     }
 
     if (platform) {
-      platform.context.waitUntil(syncProject(projectRows[0].id, platform.env.MEDIA_BUCKET));
+      // In dev, force a full re-sync on every manual Refresh so pipeline / renderer
+      // changes take effect without pushing a new commit. Prod stays incremental.
+      platform.context.waitUntil(syncProject(projectRows[0].id, platform.env.MEDIA_BUCKET, dev));
     }
 
     return { ok: true };

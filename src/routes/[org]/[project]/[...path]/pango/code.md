@@ -68,6 +68,16 @@ An unknown language, so Pango can confirm it falls back without faceplanting:
 ?? this grammar climbed the wrong bar ??
 ```
 
+## Long lines
+
+A line too long for the block wraps onto the next line instead of forcing a
+horizontal scrollbar. Indentation is kept, and wrapped continuations sit under the
+code, not under the line number:
+
+```bash
+echo "Pango climbed every bar in the jungle gym twice, rolled into a ball at the very top, bounced down four whole levels, ate exactly one thousand and forty-two ants, and still had time for a nap before sunrise"
+```
+
 ## Fences inside fences
 
 Wrap a block in **four** backticks when its body itself contains a three-backtick
