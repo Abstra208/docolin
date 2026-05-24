@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { localizeHref } from "$paraglide/runtime";
   import { m } from "$paraglide/messages";
   import Search from "@lucide/svelte/icons/search";
@@ -14,20 +15,121 @@
   // categorical location ("you're in network/firewall stuff"), not source
   // location.
   //
-  // Search bar in the middle is currently a disabled placeholder. Search
-  // isn't wired up yet; pre-alpha "obvs comes later" handling. Rendered as
-  // a disabled button (not an input) so its non-functional state is obvious
-  // and not misleading.
+  // Breadcrumb collapse: when the full kind path would run into the centered
+  // search, leading segments fold into a single "…" one at a time (first one,
+  // then two, ...) until only the leaf remains; if even the leaf is too wide its
+  // text truncates. Driven by measuring a hidden full-width copy against the
+  // space before the search (or the right cluster when the search is hidden), so
+  // it collapses exactly as much as it needs to and no more.
+  //
+  // Search bar in the middle is a disabled placeholder until search is wired.
 
   interface Props {
     kindSegments: string[];
     // When the page is scrolled to the very bottom, drop the backdrop blur
-    // and go fully opaque: there's no scroll-past content to see through, so
-    // the translucent treatment just adds visual noise for no information.
+    // and go fully opaque: there's no scroll-past content to see through.
     atBottom?: boolean;
   }
   let { kindSegments, atBottom = false }: Props = $props();
+
+  let navEl = $state<HTMLElement | null>(null);
+  let crumbEl = $state<HTMLElement | null>(null);
+  let searchEl = $state<HTMLElement | null>(null);
+  let rightEl = $state<HTMLElement | null>(null);
+  let measureEl = $state<HTMLElement | null>(null);
+
+  // Leading kind segments folded into one "…". 0 = show the whole path.
+  let hiddenCount = $state(0);
+  let truncateLeaf = $state(false);
+  let leafMaxPx = $state(0);
+
+  const GAP_PX = 16; // breathing room kept before the obstacle on the right
+
+  const visibleSegments = $derived(kindSegments.slice(hiddenCount));
+
+  function remeasure(): void {
+    if (crumbEl === null || measureEl === null) return;
+    if (kindSegments.length <= 1) {
+      hiddenCount = 0;
+      truncateLeaf = false;
+      return;
+    }
+    // The obstacle is the centered search when it's shown, otherwise the right
+    // widget cluster (search is hidden below md).
+    const obstacle = searchEl !== null && searchEl.offsetWidth > 0 ? searchEl : rightEl;
+    if (obstacle === null) return;
+    const available =
+      obstacle.getBoundingClientRect().left - crumbEl.getBoundingClientRect().left - GAP_PX;
+
+    // Per-segment widths from the always-full hidden copy (color doesn't affect
+    // width, so the copy renders uniformly). pr-2 spacing is baked into each
+    // unit, so widths sum directly.
+    const widths = [...measureEl.querySelectorAll<HTMLElement>("[data-seg]")].map(
+      (u) => u.offsetWidth,
+    );
+    const ellipsisWidth = measureEl.querySelector<HTMLElement>("[data-ellipsis]")?.offsetWidth ?? 0;
+
+    const total = widths.reduce((sum, w) => sum + w, 0);
+    if (total <= available) {
+      hiddenCount = 0;
+      truncateLeaf = false;
+      return;
+    }
+
+    // Keep trailing segments greedily, reserving room for the leading "…".
+    const budget = available - ellipsisWidth;
+    let used = 0;
+    let kept = 0;
+    for (let i = widths.length - 1; i >= 0; i -= 1) {
+      if (used + widths[i] <= budget) {
+        used += widths[i];
+        kept += 1;
+      } else break;
+    }
+    if (kept === 0) {
+      // Not even the leaf fits: show "… / leaf" and truncate the leaf's text.
+      hiddenCount = widths.length - 1;
+      truncateLeaf = true;
+      leafMaxPx = Math.max(48, Math.floor(budget));
+    } else {
+      hiddenCount = widths.length - kept;
+      truncateLeaf = false;
+    }
+  }
+
+  // Re-measure whenever the path changes (navigation), after the DOM paints.
+  $effect(() => {
+    void kindSegments;
+    requestAnimationFrame(remeasure);
+  });
+
+  onMount(() => {
+    const observer = new ResizeObserver(() => requestAnimationFrame(remeasure));
+    if (navEl !== null) observer.observe(navEl);
+    requestAnimationFrame(remeasure);
+    return () => {
+      observer.disconnect();
+    };
+  });
 </script>
+
+{#snippet crumbUnit(seg: string, isLeaf: boolean, truncate: boolean)}
+  <span data-seg class="inline-flex shrink-0 items-baseline gap-1.5 pr-2 font-mono text-xs">
+    <span class="text-foreground/25">/</span>
+    {#if truncate}
+      <span class="text-foreground truncate" style="max-width: {leafMaxPx}px">{seg}</span>
+    {:else}
+      <span class={isLeaf ? "text-foreground" : "text-muted-foreground"}>{seg}</span>
+    {/if}
+  </span>
+{/snippet}
+
+{#snippet ellipsisUnit()}
+  <span data-ellipsis class="inline-flex shrink-0 items-baseline gap-1.5 pr-2 font-mono text-xs">
+    <span class="text-foreground/25">/</span>
+    <span class="text-muted-foreground">…</span>
+  </span>
+{/snippet}
 
 <header
   id="top"
@@ -35,10 +137,12 @@
     ? 'bg-background'
     : 'bg-background/85 backdrop-blur-md'}"
 >
-  <nav class="relative flex items-center justify-between gap-4 px-4 py-2.5 sm:px-6">
-    <!-- Left: docolin logo + kind-path breadcrumb. Same baseline-alignment
-         trick as DashboardNavbar: sans-serif logo, mono breadcrumb. -->
-    <div class="flex min-w-0 shrink-0 items-baseline gap-2">
+  <nav
+    bind:this={navEl}
+    class="relative flex items-center justify-between gap-4 px-4 py-2.5 sm:px-6"
+  >
+    <!-- Left: docolin logo + collapsing kind-path breadcrumb. -->
+    <div class="flex min-w-0 items-baseline gap-2">
       <a
         href={localizeHref("/")}
         class="text-foreground shrink-0 font-semibold tracking-tight whitespace-nowrap"
@@ -46,44 +150,31 @@
         docolin
       </a>
 
-      <!-- Wide-screen: full kind chain visible. -->
-      <div class="hidden min-w-0 items-baseline gap-2 sm:flex">
-        {#each kindSegments as seg, i (`${String(i)}-${seg}`)}
-          <span class="text-foreground/25 shrink-0 font-mono text-xs">/</span>
-          {#if i === kindSegments.length - 1}
-            <span class="text-foreground truncate font-mono text-xs">{seg}</span>
-          {:else}
-            <span class="text-muted-foreground truncate font-mono text-xs">{seg}</span>
-          {/if}
-        {/each}
-      </div>
-
-      <!-- Narrow-screen: collapse to "... / leaf" so a deep kind path doesn't
-           overflow on mobile. -->
-      <div class="flex min-w-0 items-baseline gap-2 sm:hidden">
-        {#if kindSegments.length > 1}
-          <span class="text-foreground/25 shrink-0 font-mono text-xs">/</span>
-          <span class="text-muted-foreground shrink-0 font-mono text-xs">…</span>
+      <span bind:this={crumbEl} class="flex min-w-0 items-baseline overflow-hidden">
+        {#if hiddenCount === 0}
+          {#each kindSegments as seg, i (i)}
+            <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -->
+            {@render crumbUnit(seg, i === kindSegments.length - 1, false)}
+          {/each}
+        {:else}
+          <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -->
+          {@render ellipsisUnit()}
+          {#each visibleSegments as seg, i (i)}
+            <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -->
+            {@render crumbUnit(
+              seg,
+              i === visibleSegments.length - 1,
+              truncateLeaf && i === visibleSegments.length - 1,
+            )}
+          {/each}
         {/if}
-        {#if kindSegments.length >= 1}
-          <span class="text-foreground/25 shrink-0 font-mono text-xs">/</span>
-          <span class="text-foreground truncate font-mono text-xs">
-            {kindSegments[kindSegments.length - 1]}
-          </span>
-        {/if}
-      </div>
+      </span>
     </div>
 
-    <!-- Center: search + language as one "discovery" cluster. Absolute-
-         positioned so the cluster sits at the navbar's horizontal center
-         independent of the breadcrumb / auth slot widths. pointer-events:
-         none on the outer wrapper + auto on the inner cluster so clicks
-         meant for the breadcrumb or auth slot pass through the empty
-         gutter. Search uses h-9 + border-input + bg-transparent so it
-         baseline-matches the LanguageSwitcher's Select.Trigger; they read
-         as one cohesive control bar. -->
+    <!-- Center: search + language cluster, absolute-centered on the viewport
+         independent of the side slots. -->
     <div class="pointer-events-none absolute inset-x-0 hidden items-center justify-center md:flex">
-      <div class="pointer-events-auto flex w-full max-w-md items-center gap-2">
+      <div bind:this={searchEl} class="pointer-events-auto flex w-full max-w-md items-center gap-2">
         <button
           type="button"
           class="border-input inline-flex h-9 flex-1 cursor-not-allowed items-center gap-2 border bg-transparent px-3 text-sm"
@@ -97,17 +188,27 @@
       </div>
     </div>
 
-    <!-- Right: auth slot only. min-h-9 reserves the height of the eventual
-         buttons even when the slot is empty during loading, so the navbar
-         doesn't grow vertically when content lands. min-w-48 reserves the
-         worst-case [bell + handle] width; anon's narrower "Sign in" right-
-         aligns inside it so the right edge stays even. -->
-    <div class="flex shrink-0 items-center gap-1.5">
+    <!-- Right: auth slot. -->
+    <div bind:this={rightEl} class="flex shrink-0 items-center gap-1.5">
       <div class="flex min-h-9 min-w-48 items-center justify-end gap-1.5">
         <InboxBell />
         <AccountMenu />
       </div>
       <ThemeToggle />
     </div>
+
+    <!-- Hidden full-width copy, measured to decide how much to collapse. -->
+    <span
+      bind:this={measureEl}
+      aria-hidden="true"
+      class="pointer-events-none invisible absolute top-0 left-0 flex items-baseline"
+    >
+      {#each kindSegments as seg, i (i)}
+        <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -->
+        {@render crumbUnit(seg, false, false)}
+      {/each}
+      <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -->
+      {@render ellipsisUnit()}
+    </span>
   </nav>
 </header>
