@@ -185,13 +185,16 @@ html {
      * body scroll and removes the scrollbar) doesn't widen the viewport and
      * shift the fixed navbar and page content sideways. */
     scrollbar-gutter: stable;
-    /* Firefox: thin scrollbar with neutral gray thumb on transparent track. */
+    /* Firefox: thin scrollbar with a foreground-tinted thumb on a transparent
+     * track. Deriving from --foreground keeps the thumb visible in both light
+     * and dark themes (it flips with the token). */
     scrollbar-width: thin;
-    scrollbar-color: rgb(0 0 0 / 0.2) transparent;
+    scrollbar-color: color-mix(in srgb, var(--foreground) 20%, transparent) transparent;
   }
 
-  /* Webkit/Blink: transparent track, subtle neutral-gray thumb that darkens
-   * on hover. The track shows the html background through it; that's a
+  /* Webkit/Blink: transparent track, subtle foreground-tinted thumb that
+   * strengthens on hover. Derived from --foreground so it stays visible in both
+   * themes. The track shows the html background through it; that's a
    * native-scrollbar constraint (the bar can't truly overlay content). */
   ::-webkit-scrollbar {
     width: 12px;
@@ -202,7 +205,7 @@ html {
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: rgb(0 0 0 / 0.2);
+    background: color-mix(in srgb, var(--foreground) 20%, transparent);
     border: 3px solid transparent;
     background-clip: padding-box;
     /* Hard corners per the locked theme. Default browser rounding doesn't
@@ -210,7 +213,7 @@ html {
     border-radius: 0;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: rgb(0 0 0 / 0.35);
+    background: color-mix(in srgb, var(--foreground) 35%, transparent);
     background-clip: padding-box;
     border-radius: 0;
   }
