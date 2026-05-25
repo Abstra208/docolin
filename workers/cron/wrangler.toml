@@ -12,10 +12,11 @@ name = "docolin-cron"
 main = "index.ts"
 compatibility_date = "2026-05-17"
 
-# Hourly. The sync orchestrator's queue picks projects stale by >24h within
-# the tick's 20-second budget; everything else defers to the next tick.
+# Every 15 minutes. Each job drains a bounded batch within the tick's budget
+# (e.g. embed-versions does up to 50 versions) and defers the rest to the next
+# tick; most ticks are no-ops once content is steady.
 [triggers]
-crons = ["0 * * * *"]
+crons = ["*/15 * * * *"]
 
 [vars]
 # Public origin of the docolin Pages deployment. Override per environment

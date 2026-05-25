@@ -145,6 +145,21 @@ export async function processFileDelete(
 
 // --- helpers ---
 
+// Flags exactly the just-published version as the doco's latest, in the same
+// transaction that moves latest_published_version_id. The partial search indexes
+// (WHERE is_latest) depend on this staying in sync, so set is_latest here rather
+// than via a DB trigger.
+async function markLatestVersion(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  docoId: string,
+  versionId: string,
+): Promise<void> {
+  await tx
+    .update(versions)
+    .set({ isLatest: sql`${versions.id} = ${versionId}` })
+    .where(eq(versions.docoId, docoId));
+}
+
 async function createDocoAndFirstVersion(
   filePath: string,
   parsed: ParsedDoco,
@@ -177,6 +192,8 @@ async function createDocoAndFirstVersion(
       .update(docos)
       .set({ latestPublishedVersionId: versionId, updatedAt: new Date() })
       .where(eq(docos.id, docoRow.id));
+
+    await markLatestVersion(tx, docoRow.id, versionId);
 
     return { status: "created", docoId: docoRow.id, versionId };
   });
@@ -233,6 +250,8 @@ async function addVersionToExistingDoco(
         updatedAt: new Date(),
       })
       .where(eq(docos.id, docoId));
+
+    await markLatestVersion(tx, docoId, versionId);
 
     return { status: "updated", docoId, versionId };
   });

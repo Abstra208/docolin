@@ -4,7 +4,13 @@
 // voter's latest stamp and deriving weights), runs the scoring core, and rolls
 // up the count and last-confirmed timestamp.
 
-import { computeScore, type ScoringStamp, type StampOutcome } from "./score";
+import {
+  computeRankingScore,
+  computeScore,
+  inheritedPriorMean,
+  type ScoringStamp,
+  type StampOutcome,
+} from "./score";
 import { computePersonWeight, DEFAULT_BASE_WEIGHT, type StampSource } from "./weights";
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
@@ -27,6 +33,12 @@ export interface StampRow {
 export interface StampSummary {
   /** 0-1000 reliability score, or null when below the display gate. */
   score: number | null;
+  /**
+   * 0-1000 ungated ranking estimate that search ranks on. Always present (even
+   * with no stamps it equals the inherited prior), so a fresh version keeps the
+   * lineage's standing instead of dropping to zero. See verification 4.8.
+   */
+  rankingScore: number;
   /** Stamps behind the score, deduped to each voter's latest. */
   stampCount: number;
   /** Most recent worked / worked-with-caveats stamp, for "last confirmed". */
@@ -83,10 +95,23 @@ function toScoringStamp(row: StampRow, now: Date): ScoringStamp {
   };
 }
 
-/** Rolls a version's raw stamp rows up into its cached aggregate. */
-export function summarizeStamps(rows: StampRow[], now: Date = new Date()): StampSummary {
+/**
+ * Rolls a version's raw stamp rows up into its cached aggregate.
+ *
+ * @param previousRankingScore  the previous version's stored ranking score (or
+ *   null for a first version), which seeds this version's ranking-estimate prior
+ *   so a fresh version inherits, rather than resets, the lineage's standing.
+ */
+export function summarizeStamps(
+  rows: StampRow[],
+  now: Date = new Date(),
+  previousRankingScore: number | null = null,
+): StampSummary {
   const kept = dedupeLatestPerVoter(rows);
-  const result = computeScore(kept.map((row) => toScoringStamp(row, now)));
+  const scoringStamps = kept.map((row) => toScoringStamp(row, now));
+
+  const result = computeScore(scoringStamps);
+  const rankingScore = computeRankingScore(scoringStamps, inheritedPriorMean(previousRankingScore));
 
   let lastConfirmedAt: Date | null = null;
   for (const row of kept) {
@@ -98,6 +123,7 @@ export function summarizeStamps(rows: StampRow[], now: Date = new Date()): Stamp
 
   return {
     score: result.status === "verified" ? result.score : null,
+    rankingScore,
     stampCount: kept.length,
     lastConfirmedAt,
     effectiveWeight: result.effectiveWeight,

@@ -20,3 +20,12 @@ export function toLtree(path: string): string {
 export function fromLtree(path: string): string {
   return path.replaceAll(".", "/").replaceAll("_", "-");
 }
+
+// Postgres tsvector: a weighted, stemmed document vector for full-text search.
+// Always a generated column (the DB derives it from the text fields), so the
+// app never writes it; the driver only ever reads the rare selected value.
+export const tsvector = customType<{ data: string; driverData: string }>({
+  dataType() {
+    return "tsvector";
+  },
+});

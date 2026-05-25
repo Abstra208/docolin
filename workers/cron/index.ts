@@ -1,8 +1,8 @@
 // Cron worker. CF fires `scheduled()` on the schedule declared in wrangler.toml;
-// this handler just calls the docolin app's /api/cron/sync endpoint with the
-// shared secret. All sync logic lives in the main app, keeping the worker
-// dumb means we don't duplicate the orchestrator code or have two places to
-// update when sync changes.
+// this handler just calls the docolin app's /api/cron/* endpoints with the
+// shared secret. All logic lives in the main app, keeping the worker dumb means
+// we don't duplicate code or have two places to update when a job changes. Jobs
+// run in parallel and independently: one failing doesn't block the others.
 
 import type { ScheduledEvent, ExecutionContext } from "@cloudflare/workers-types";
 
@@ -11,14 +11,19 @@ interface Env {
   CRON_SECRET: string;
 }
 
+// The cron jobs fired each tick. sync pulls fresh content; recompute-scores
+// refreshes Pango scores from the stamps ledger; embed-versions fills in the
+// dense search vectors for newly latest versions.
+const CRON_PATHS = ["/api/cron/sync", "/api/cron/recompute-scores", "/api/cron/embed-versions"];
+
 export default {
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(triggerSync(env));
+    ctx.waitUntil(Promise.allSettled(CRON_PATHS.map((path) => triggerCron(env, path))));
   },
 };
 
-async function triggerSync(env: Env): Promise<void> {
-  const url = `${env.DOCOLIN_BASE_URL}/api/cron/sync`;
+async function triggerCron(env: Env, path: string): Promise<void> {
+  const url = `${env.DOCOLIN_BASE_URL}${path}`;
   let res: Response;
   try {
     res = await fetch(url, {

@@ -1,7 +1,7 @@
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
 import type { AuthResult } from "@workos/authkit-session";
-import type { R2Bucket } from "@cloudflare/workers-types";
+import type { Ai, R2Bucket } from "@cloudflare/workers-types";
 import type { DbOrg, DbUser } from "$lib/server/users";
 
 declare global {
@@ -34,6 +34,9 @@ declare global {
     interface Platform {
       env: {
         MEDIA_BUCKET: R2Bucket;
+        // Workers AI binding: runs the bge-m3 embedding model (and future
+        // rerankers) on Cloudflare's infra so search text never leaves our boundary.
+        AI: Ai;
       };
       // CF Workers' ExecutionContext. `waitUntil` keeps the Worker alive
       // until the promise resolves; used by sync engine to fire-and-forget

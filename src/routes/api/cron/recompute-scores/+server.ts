@@ -1,5 +1,5 @@
 import { error, json } from "@sveltejs/kit";
-import { eq, gt, isNull, lt, or, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import { CRON_SECRET } from "$env/static/private";
 import type { RequestHandler } from "./$types";
 import { db } from "$lib/server/db";
@@ -42,14 +42,27 @@ export const POST: RequestHandler = async ({ request }) => {
     )
     .limit(MAX_VERSIONS_PER_TICK);
 
+  // Latest versions that have never been scored (just published with no stamps
+  // yet, or pre-dating the ranking column) so their inherited ranking prior
+  // lands without waiting for a first stamp. recomputeVersionScore on a
+  // stampless version writes its inherited estimate and leaves the gated badge
+  // null, so once scored it drops out of this set.
+  const unseeded = await db
+    .select({ versionId: versions.id })
+    .from(versions)
+    .where(and(eq(versions.isLatest, true), isNull(versions.verificationRankingScore)))
+    .limit(MAX_VERSIONS_PER_TICK);
+
+  const versionIds = [...new Set([...dirty, ...unseeded].map((r) => r.versionId))];
+
   const startedAt = Date.now();
   const summary = { processed: 0, deferred: 0 };
-  for (const row of dirty) {
+  for (const versionId of versionIds) {
     if (Date.now() - startedAt > TICK_BUDGET_MS) {
-      summary.deferred = dirty.length - summary.processed;
+      summary.deferred = versionIds.length - summary.processed;
       break;
     }
-    await recomputeVersionScore(row.versionId);
+    await recomputeVersionScore(versionId);
     summary.processed += 1;
   }
 

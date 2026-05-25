@@ -95,3 +95,25 @@ describe("summarizeStamps gating", () => {
     expect(human.effectiveWeight).toBeGreaterThan(anon.effectiveWeight * 5);
   });
 });
+
+describe("summarizeStamps rankingScore", () => {
+  it("is always present even when the gated display score is null", () => {
+    const few = Array.from({ length: 3 }, () => row());
+    const summary = summarizeStamps(few, NOW);
+    expect(summary.score).toBeNull(); // below the display gate
+    expect(summary.rankingScore).toBeGreaterThan(0); // still rankable by search
+  });
+
+  it("inherits the previous version's regressed estimate when there are no stamps", () => {
+    // No stamps: the estimate equals the inherited prior. A 900 lineage regresses
+    // to 0.84 -> 840; a first version (null predecessor) sits at the global 700.
+    expect(summarizeStamps([], NOW, 900).rankingScore).toBe(840);
+    expect(summarizeStamps([], NOW, null).rankingScore).toBe(700);
+  });
+
+  it("ranks a fresh stampless cut of a strong guide above a brand-new guide", () => {
+    expect(summarizeStamps([], NOW, 900).rankingScore).toBeGreaterThan(
+      summarizeStamps([], NOW, null).rankingScore,
+    );
+  });
+});

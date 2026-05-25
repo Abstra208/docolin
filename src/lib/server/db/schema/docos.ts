@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   index,
   integer,
@@ -14,7 +15,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { gitSources } from "./git-sources";
 import { projects } from "./projects";
-import { ltree } from "./types";
+import { ltree, tsvector } from "./types";
 import { users } from "./users";
 
 // Stable doco identity. Belongs to a project (which is owned by an org).
@@ -134,14 +135,42 @@ export const versions = pgTable(
     // the raw number of stamps behind it; lastConfirmedAt is the most recent
     // worked / worked-with-caveats stamp (for "last confirmed working N ago").
     verificationScore: integer("verification_score"),
+    // Ungated, history-aware ranking estimate (0-1000) that search ranks on. It
+    // shrinks toward a prior that regresses the previous version's estimate
+    // toward the global mean, so publishing a fresh version does not reset the
+    // guide's ranking to zero. Honest display still uses verificationScore. See
+    // tmp/docolin-verification.md 4.8.
+    verificationRankingScore: integer("verification_ranking_score"),
     verificationStampCount: integer("verification_stamp_count").notNull().default(0),
     verificationLastConfirmedAt: timestamp("verification_last_confirmed_at", {
       withTimezone: true,
     }),
     verificationComputedAt: timestamp("verification_computed_at", { withTimezone: true }),
 
+    // Whether this is the latest published version of its doco. Maintained in
+    // the sync/publish path alongside docos.latestPublishedVersionId so the
+    // search indexes below can be partial (WHERE is_latest), staying small and
+    // instantly fresh with no materialized-view refresh.
+    isLatest: boolean("is_latest").notNull().default(false),
+
     // Search.
-    embedding: vector("embedding", { dimensions: 1536 }),
+    // Dense embedding for semantic retrieval (Cloudflare Workers AI bge-m3,
+    // 1024-dim), computed off the write path by the embed cron; null until
+    // embedded, and nulled again when the body changes so it gets re-embedded.
+    embedding: vector("embedding", { dimensions: 1024 }),
+    // Weighted full-text vector for the lexical spine, maintained by the DB. The
+    // logic lives in the immutable SQL function docolin_search_tsv (a DB
+    // prerequisite created alongside the pg_trgm extension), because folding the
+    // text[] fields with array_to_string is not immutable enough to inline in a
+    // generated column. English is the one stemmed language (the primary content
+    // language; versions.language defaults to 'en'); every other language uses
+    // `simple` (language-neutral), with the bge-m3 dense vector carrying cross-
+    // language recall. Weights: title + aliases = A, description = B, applies_to
+    // = C, body = D. The app never writes this; the GIN index over it is the
+    // lexical spine.
+    searchTsv: tsvector("search_tsv").generatedAlwaysAs(
+      sql`docolin_search_tsv(language, title, aliases, description, applies_to, body_text)`,
+    ),
 
     createdByUserId: uuid("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
@@ -158,6 +187,21 @@ export const versions = pgTable(
     index("versions_type_idx").on(t.type),
     index("versions_language_idx").on(t.language),
     index("versions_published_at_idx").on(t.publishedAt.desc()),
+    // Partial search indexes: only the latest published version of each doco is
+    // indexed (WHERE is_latest), so they stay small and need no MV refresh. The
+    // lexical spine is the GIN over search_tsv; prefix/fuzzy trigram indexes are
+    // deferred until the query actually uses them (they would also need an
+    // immutable array-folding function for the aliases case).
+    index("versions_search_tsv_gin")
+      .using("gin", t.searchTsv)
+      .where(sql`${t.isLatest} = true`),
+    index("versions_embedding_hnsw")
+      .using("hnsw", t.embedding.op("vector_cosine_ops"))
+      .with({ m: 16, ef_construction: 200 })
+      .where(sql`${t.isLatest} = true`),
+    index("versions_applies_to_gin")
+      .using("gin", t.appliesTo)
+      .where(sql`${t.isLatest} = true`),
     check(
       "versions_type_check",
       sql`${t.type} IN ('tutorial', 'how-to', 'reference', 'explanation')`,
@@ -213,9 +257,10 @@ export const latestVersions = pgMaterializedView("latest_versions", {
   bodyText: text("body_text").notNull(),
   bodyFormat: text("body_format").notNull(),
   verificationScore: integer("verification_score"),
+  verificationRankingScore: integer("verification_ranking_score"),
   verificationStampCount: integer("verification_stamp_count").notNull(),
   verificationLastConfirmedAt: timestamp("verification_last_confirmed_at", { withTimezone: true }),
-  embedding: vector("embedding", { dimensions: 1536 }),
+  embedding: vector("embedding", { dimensions: 1024 }),
   publishedAt: timestamp("published_at", { withTimezone: true }).notNull(),
 }).as(
   sql`
@@ -243,6 +288,7 @@ export const latestVersions = pgMaterializedView("latest_versions", {
       v.body_text,
       v.body_format,
       v.verification_score,
+      v.verification_ranking_score,
       v.verification_stamp_count,
       v.verification_last_confirmed_at,
       v.embedding,

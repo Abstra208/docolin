@@ -15,3 +15,9 @@ pages_build_output_dir = ".svelte-kit/cloudflare"
 binding = "MEDIA_BUCKET"
 bucket_name = "docolin-media"
 preview_bucket_name = "docolin-media-dev"
+
+# Workers AI: runs the bge-m3 embedding model (and future rerankers) on
+# Cloudflare's infra, so search document/query text never leaves our boundary.
+# Surfaces as event.platform.env.AI in SvelteKit server code.
+[ai]
+binding = "AI"

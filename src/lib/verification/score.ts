@@ -31,6 +31,13 @@ export interface ScoringConfig {
   minEffectiveWeight: number;
   /** Output scale; 1000 maps the [0,1] mean to a 0-1000 integer. */
   scoreScale: number;
+  /**
+   * How strongly a new version inherits the previous version's ranking estimate
+   * as its prior (see {@link inheritedPriorMean}): 1 keeps it fully, 0 resets to
+   * the global prior, and in between the previous estimate regresses that
+   * fraction of the way toward the global mean.
+   */
+  inheritDecay: number;
 }
 
 export const DEFAULT_SCORING_CONFIG: ScoringConfig = {
@@ -40,6 +47,7 @@ export const DEFAULT_SCORING_CONFIG: ScoringConfig = {
   priorMean: 0.7,
   minEffectiveWeight: 3,
   scoreScale: 1000,
+  inheritDecay: 0.7,
 };
 
 /**
@@ -84,17 +92,17 @@ export function clusterDiscount(clusterSize: number, rho: number): number {
 }
 
 /**
- * Compute a guide version's reliability score from its stamps.
- *
- * @param stamps      every stamp on the version (already weight-resolved).
- * @param clusterRho  intra-cluster correlation per clusterId; absent = 0 (independent).
- * @param config      scoring parameters; defaults to {@link DEFAULT_SCORING_CONFIG}.
+ * Sum the total effective weight (W) and weighted value (S) over a version's
+ * stamps, applying per-stamp source/person/competence weights, freshness decay,
+ * and the diversity collapse for correlated clusters. Shared by the gated
+ * display score and the ungated ranking estimate so they never disagree on the
+ * evidence math.
  */
-export function computeScore(
+function accumulate(
   stamps: ScoringStamp[],
-  clusterRho = new Map<string, number>(),
-  config: ScoringConfig = DEFAULT_SCORING_CONFIG,
-): ScoreResult {
+  clusterRho: Map<string, number>,
+  config: ScoringConfig,
+): { totalWeight: number; valueSum: number } {
   const clusterSizes = new Map<string, number>();
   for (const stamp of stamps) {
     clusterSizes.set(stamp.clusterId, (clusterSizes.get(stamp.clusterId) ?? 0) + 1);
@@ -115,6 +123,27 @@ export function computeScore(
     valueSum += weight * config.outcomeValue[stamp.outcome];
   }
 
+  return { totalWeight, valueSum };
+}
+
+/**
+ * Compute a guide version's displayed reliability score from its stamps. Gated:
+ * below the minimum effective weight it returns "unverified" ("not verified
+ * yet") rather than a precise-looking number, and it shrinks toward the global
+ * prior mean. This is the honest, per-version badge; search ranks on
+ * {@link computeRankingScore} instead.
+ *
+ * @param stamps      every stamp on the version (already weight-resolved).
+ * @param clusterRho  intra-cluster correlation per clusterId; absent = 0 (independent).
+ * @param config      scoring parameters; defaults to {@link DEFAULT_SCORING_CONFIG}.
+ */
+export function computeScore(
+  stamps: ScoringStamp[],
+  clusterRho = new Map<string, number>(),
+  config: ScoringConfig = DEFAULT_SCORING_CONFIG,
+): ScoreResult {
+  const { totalWeight, valueSum } = accumulate(stamps, clusterRho, config);
+
   if (totalWeight < config.minEffectiveWeight) {
     return { status: "unverified", effectiveWeight: totalWeight };
   }
@@ -126,4 +155,51 @@ export function computeScore(
     score: Math.round(mean * config.scoreScale),
     effectiveWeight: totalWeight,
   };
+}
+
+/**
+ * Compute a guide version's search-ranking estimate: the same shrinkage mean as
+ * {@link computeScore} but ungated (always a 0-1000 number) and shrinking toward
+ * an explicit `priorMean` rather than the global one. A new version inherits the
+ * previous version's decayed estimate as its prior (see {@link inheritedPriorMean}),
+ * so publishing a fresh version does not reset the guide's ranking to zero. Used
+ * only for ranking; the displayed badge stays {@link computeScore}. See
+ * tmp/docolin-verification.md 4.8.
+ *
+ * @param stamps      every stamp on the version (already weight-resolved).
+ * @param priorMean   the [0,1] value the estimate shrinks toward (the inherited prior).
+ * @param clusterRho  intra-cluster correlation per clusterId; absent = 0 (independent).
+ * @param config      scoring parameters; defaults to {@link DEFAULT_SCORING_CONFIG}.
+ */
+export function computeRankingScore(
+  stamps: ScoringStamp[],
+  priorMean: number,
+  clusterRho = new Map<string, number>(),
+  config: ScoringConfig = DEFAULT_SCORING_CONFIG,
+): number {
+  const { totalWeight, valueSum } = accumulate(stamps, clusterRho, config);
+  const mean = (valueSum + config.priorStrength * priorMean) / (totalWeight + config.priorStrength);
+  return Math.round(mean * config.scoreScale);
+}
+
+/**
+ * The prior mean a version's ranking estimate shrinks toward: the previous
+ * version's ranking estimate regressed `config.inheritDecay` of the way back
+ * toward the global mean. So a new cut of a strong guide starts ABOVE the global
+ * prior (not below it, as a decay-toward-zero would wrongly give), a new cut of a
+ * weak one starts below, and repeated unstamped republishes converge to the
+ * global mean rather than collapsing to zero. A first version (no predecessor)
+ * is the global prior. Chaining across a lineage makes the prior an
+ * exponentially-weighted accumulation of the whole history (verification 4.8).
+ *
+ * @param previousRankingScore  the previous version's stored 0-1000 ranking score, or null.
+ * @returns the prior on the [0,1] value scale {@link computeRankingScore} expects.
+ */
+export function inheritedPriorMean(
+  previousRankingScore: number | null,
+  config: ScoringConfig = DEFAULT_SCORING_CONFIG,
+): number {
+  if (previousRankingScore === null) return config.priorMean;
+  const previous = previousRankingScore / config.scoreScale;
+  return config.priorMean + config.inheritDecay * (previous - config.priorMean);
 }

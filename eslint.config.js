@@ -82,6 +82,8 @@ export default ts.config(
       "build/",
       "node_modules/",
       ".vercel/",
+      // Transient build artifacts the running dev server / wrangler create.
+      ".wrangler/",
       "src/paraglide/",
       // shadcn-svelte's chart component is generated/vendored (re-added with -o);
       // its LayerChart-composed code trips many type-aware rules and would resurface

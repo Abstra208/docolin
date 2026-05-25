@@ -1,6 +1,8 @@
 import { describe, it, expect } from "bun:test";
 import {
   computeScore,
+  computeRankingScore,
+  inheritedPriorMean,
   decayWeight,
   clusterDiscount,
   DEFAULT_SCORING_CONFIG,
@@ -140,5 +142,69 @@ describe("computeScore freshness", () => {
     // Stale stamps weigh half as much, so the same 10 worked shrink further to the prior.
     expect(stale.effectiveWeight).toBeCloseTo(fresh.effectiveWeight / 2, 6);
     expect(stale.score).toBeLessThan(fresh.score);
+  });
+});
+
+describe("inheritedPriorMean", () => {
+  it("is the global prior for a first version (no predecessor)", () => {
+    expect(inheritedPriorMean(null)).toBe(DEFAULT_SCORING_CONFIG.priorMean);
+  });
+
+  it("regresses a strong lineage toward the mean but keeps it above the prior", () => {
+    // 0.7 + 0.7 * (0.9 - 0.7) = 0.84, above the 0.7 global prior.
+    expect(inheritedPriorMean(900)).toBeCloseTo(0.84, 10);
+    expect(inheritedPriorMean(900)).toBeGreaterThan(DEFAULT_SCORING_CONFIG.priorMean);
+  });
+
+  it("pulls a weak lineage below the prior, never to zero", () => {
+    // 0.7 + 0.7 * (0.5 - 0.7) = 0.56; even a 0 lineage lands at 0.21, not 0.
+    expect(inheritedPriorMean(500)).toBeCloseTo(0.56, 10);
+    expect(inheritedPriorMean(0)).toBeCloseTo(0.21, 10);
+  });
+
+  it("leaves a prior already at the mean unchanged", () => {
+    expect(inheritedPriorMean(700)).toBeCloseTo(0.7, 10);
+  });
+});
+
+describe("computeRankingScore", () => {
+  it("is always present (ungated), unlike the gated display score", () => {
+    // Two stamps are below the display gate, so computeScore is unverified, but
+    // the ranking estimate still returns a number search can sort on.
+    expect(computeScore(manyIndependent(2)).status).toBe("unverified");
+    expect(computeRankingScore(manyIndependent(2), 0.7)).toBeGreaterThan(0);
+  });
+
+  it("equals the scaled prior when there are no stamps", () => {
+    expect(computeRankingScore([], 0.84)).toBe(840);
+    expect(computeRankingScore([], DEFAULT_SCORING_CONFIG.priorMean)).toBe(700);
+  });
+
+  it("starts a fresh cut of a strong guide above a brand-new guide", () => {
+    const freshCutOfStrong = computeRankingScore([], inheritedPriorMean(900));
+    const brandNew = computeRankingScore([], inheritedPriorMean(null));
+    expect(freshCutOfStrong).toBe(840);
+    expect(brandNew).toBe(700);
+    expect(freshCutOfStrong).toBeGreaterThan(brandNew);
+  });
+
+  it("lets the version's own stamps move it off the inherited prior", () => {
+    const weakPrior = inheritedPriorMean(500); // 0.56
+    const withWorked = computeRankingScore(manyIndependent(3, { outcome: "worked" }), weakPrior);
+    const withFailures = computeRankingScore(
+      manyIndependent(3, { outcome: "didnt_work" }),
+      weakPrior,
+    );
+    expect(withWorked).toBeGreaterThan(560);
+    expect(withFailures).toBeLessThan(560);
+  });
+
+  it("converges toward the global mean over repeated unstamped republishes", () => {
+    const v1 = computeRankingScore([], inheritedPriorMean(900)); // 840
+    const v2 = computeRankingScore([], inheritedPriorMean(v1)); // 798
+    const v3 = computeRankingScore([], inheritedPriorMean(v2)); // ~769
+    expect(v1).toBeGreaterThan(v2);
+    expect(v2).toBeGreaterThan(v3);
+    expect(v3).toBeGreaterThan(700); // approaching the mean, still above it
   });
 });
