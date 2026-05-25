@@ -1,30 +1,135 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { m } from "$paraglide/messages";
+  import { goto } from "$app/navigation";
+  import { localizeHref, getLocale } from "$paraglide/runtime";
+  import { commandPalette } from "$lib/client/command-palette.svelte";
   import savanna1920 from "$lib/assets/hero/savanna-1920.webp";
   import savanna1280 from "$lib/assets/hero/savanna-1280.webp";
   import savanna768 from "$lib/assets/hero/savanna-768.webp";
   import { HOME_SEARCH_INPUT_ID } from "$lib/constants/home";
+  import PawPrint from "@lucide/svelte/icons/paw-print";
+  import CornerDownLeft from "@lucide/svelte/icons/corner-down-left";
+
+  // The hero search is the homepage's single search surface: type and matching
+  // guides appear in a panel directly under the input (no modal). ⌘K focuses
+  // this input instead of opening the global palette (registered below), and any
+  // printable keypress focuses it too, so a visitor can just start typing.
+
+  interface HeroResult {
+    title: string;
+    href: string;
+    kindPath: string;
+    pangoScore: number | null;
+  }
 
   let query = $state("");
+  let results = $state<HeroResult[]>([]);
+  let loading = $state(false);
+  let focused = $state(false);
+  // -1 = nothing selected: a plain Enter opens /search (search-box model). The
+  // reader picks a specific result by arrowing/tabbing to it, or clicking.
+  let highlighted = $state(-1);
+  let inputEl = $state<HTMLInputElement | null>(null);
+  let debounce: ReturnType<typeof setTimeout> | undefined;
+  let controller: AbortController | null = null;
 
-  // Mac key-chip detection. typeof guard makes this safe during SSR (where
-  // navigator is undefined); on the client the value flips to true for Apple
-  // user agents during hydration.
-  const isMac = $derived(
-    typeof navigator !== "undefined" &&
-      (navigator.userAgent.includes("Mac") ||
-        navigator.userAgent.includes("iPhone") ||
-        navigator.userAgent.includes("iPad") ||
-        navigator.userAgent.includes("iPod")),
-  );
+  const trimmed = $derived(query.trim());
+  const panelOpen = $derived(focused && trimmed.length > 0);
+  const seeAllHref = $derived(`/search?q=${encodeURIComponent(trimmed)}`);
+  // Selectable rows: each result, then the always-present "see all" row.
+  const itemCount = $derived(results.length + 1);
 
-  const shortcutLabel = $derived(isMac ? "⌘K" : "Ctrl K");
-  const searchPlaceholder = $derived(`${shortcutLabel}   ${m.home_hero_search_placeholder()}`);
+  async function runSearch(raw: string): Promise<void> {
+    const q = raw.trim();
+    controller?.abort();
+    if (q.length === 0) {
+      results = [];
+      loading = false;
+      return;
+    }
+    controller = new AbortController();
+    loading = true;
+    try {
+      const params = new URLSearchParams({ q, mode: "lexical", limit: "5", lang: getLocale() });
+      const res = await fetch(`/api/search?${params.toString()}`, { signal: controller.signal });
+      if (res.ok) {
+        const data = (await res.json()) as { results: HeroResult[] };
+        results = data.results;
+        highlighted = -1;
+      }
+    } catch {
+      // Aborted (newer keystroke) or offline: keep the last results on screen.
+    } finally {
+      loading = false;
+    }
+  }
 
+  // Debounced lexical fetch as the visitor types (the instant path).
+  $effect(() => {
+    const q = query;
+    clearTimeout(debounce);
+    debounce = setTimeout(() => void runSearch(q), 120);
+  });
+
+  function navigateTo(href: string): void {
+    void goto(localizeHref(href));
+  }
+
+  function onInputKeydown(event: KeyboardEvent): void {
+    if (event.key === "Escape") {
+      inputEl?.blur();
+      return;
+    }
+    if (trimmed.length === 0) {
+      if (event.key === "Enter") event.preventDefault();
+      return;
+    }
+    if (event.key === "ArrowDown" || (event.key === "Tab" && !event.shiftKey)) {
+      event.preventDefault();
+      highlighted = Math.min(highlighted + 1, itemCount - 1);
+    } else if (event.key === "ArrowUp" || (event.key === "Tab" && event.shiftKey)) {
+      event.preventDefault();
+      highlighted = Math.max(highlighted - 1, -1);
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      // A plain Enter (nothing picked) opens the full results page; a picked
+      // result (via arrow/tab) navigates straight to that guide.
+      if (highlighted >= 0 && highlighted < results.length) {
+        navigateTo(results[highlighted].href);
+      } else {
+        navigateTo(seeAllHref);
+      }
+    }
+  }
+
+  // Enter that escapes the keydown handler still goes to the full results page.
   function handleSubmit(event: SubmitEvent): void {
     event.preventDefault();
-    // Search isn't wired yet. Placeholder until the search route lands.
+    if (trimmed.length > 0) navigateTo(seeAllHref);
   }
+
+  onMount(() => {
+    // ⌘K focuses this input instead of opening the modal (one surface here), and
+    // a printable keypress anywhere on the homepage focuses it (type-to-search).
+    commandPalette.focusOverride = () => inputEl?.focus();
+    const onGlobalKeydown = (event: KeyboardEvent): void => {
+      if (event.metaKey || event.ctrlKey || event.altKey || event.key.length !== 1) return;
+      const active = document.activeElement;
+      if (
+        active instanceof HTMLElement &&
+        (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable)
+      ) {
+        return;
+      }
+      inputEl?.focus();
+    };
+    document.addEventListener("keydown", onGlobalKeydown);
+    return () => {
+      commandPalette.focusOverride = null;
+      document.removeEventListener("keydown", onGlobalKeydown);
+    };
+  });
 
   // Big-pixel ordered dither. Square cells light up via a noise function
   // whose density climbs from sparse at the top to fully covered toward the
@@ -99,18 +204,104 @@
         {m.home_hero_subtitle()}
       </p>
 
-      <form onsubmit={handleSubmit} class="mx-auto mt-10 w-full max-w-2xl" role="search">
-        <label for={HOME_SEARCH_INPUT_ID} class="sr-only">{m.home_hero_search_label()}</label>
-        <input
-          id={HOME_SEARCH_INPUT_ID}
-          type="search"
-          bind:value={query}
-          placeholder={searchPlaceholder}
-          autocomplete="off"
-          spellcheck="false"
-          class="border-foreground/10 bg-background/50 placeholder:text-foreground/45 hover:bg-background/65 focus:bg-background/85 w-full appearance-none border px-5 py-3 text-base shadow-[0_4px_24px_-12px_rgb(0_0_0_/_0.2)] backdrop-blur-xl transition-colors outline-none focus:ring-0 sm:text-lg"
-        />
-      </form>
+      <div class="relative mx-auto mt-10 w-full max-w-2xl">
+        <form onsubmit={handleSubmit} role="search">
+          <label for={HOME_SEARCH_INPUT_ID} class="sr-only">{m.home_hero_search_label()}</label>
+          <input
+            bind:this={inputEl}
+            id={HOME_SEARCH_INPUT_ID}
+            type="search"
+            bind:value={query}
+            onfocus={() => {
+              focused = true;
+            }}
+            onblur={() => {
+              focused = false;
+            }}
+            onkeydown={onInputKeydown}
+            placeholder={m.home_hero_search_placeholder()}
+            autocomplete="off"
+            spellcheck="false"
+            role="combobox"
+            aria-expanded={panelOpen}
+            aria-controls="hero-search-panel"
+            aria-autocomplete="list"
+            class="border-foreground/10 bg-background/50 placeholder:text-foreground/45 hover:bg-background/65 focus:bg-background/85 w-full appearance-none border px-5 py-3 text-base shadow-[0_4px_24px_-12px_rgb(0_0_0_/_0.2)] backdrop-blur-xl transition-colors outline-none focus:ring-0 sm:text-lg"
+          />
+        </form>
+
+        {#if panelOpen}
+          <!-- mousedown preventDefault keeps the input focused while clicking a
+               result, so the panel doesn't blur-close before the click lands. -->
+          <div
+            id="hero-search-panel"
+            role="listbox"
+            tabindex="-1"
+            aria-label={m.home_hero_search_label()}
+            onmousedown={(event) => {
+              event.preventDefault();
+            }}
+            class="border-foreground/10 bg-background absolute inset-x-0 top-full z-30 mt-2 max-h-[min(20rem,55dvh)] overflow-y-auto border text-left shadow-[0_12px_32px_-12px_rgb(0_0_0_/_0.25)]"
+          >
+            {#if loading && results.length === 0}
+              <p class="text-muted-foreground px-4 py-6 text-center text-sm">
+                {m.search_palette_loading()}
+              </p>
+            {/if}
+
+            {#if !loading && results.length === 0}
+              <p class="text-muted-foreground px-4 py-6 text-center text-sm">
+                {m.search_palette_empty()}
+              </p>
+            {/if}
+
+            {#each results as result, i (result.href)}
+              <a
+                href={localizeHref(result.href)}
+                role="option"
+                aria-selected={highlighted === i}
+                onmouseenter={() => {
+                  highlighted = i;
+                }}
+                class="flex items-center gap-3 px-4 py-2 transition-colors {highlighted === i
+                  ? 'bg-foreground/10'
+                  : ''}"
+              >
+                <span class="text-foreground truncate text-sm">{result.title}</span>
+                <span
+                  class="text-muted-foreground ml-auto hidden max-w-[18rem] shrink-0 truncate font-mono text-xs sm:inline"
+                >
+                  {result.kindPath}
+                </span>
+                {#if result.pangoScore !== null}
+                  <span
+                    class="text-primary inline-flex shrink-0 items-center gap-1 font-mono text-xs"
+                  >
+                    <PawPrint class="size-3.5" />
+                    {result.pangoScore}
+                  </span>
+                {/if}
+              </a>
+            {/each}
+
+            <a
+              href={localizeHref(seeAllHref)}
+              role="option"
+              aria-selected={highlighted === results.length}
+              onmouseenter={() => {
+                highlighted = results.length;
+              }}
+              class="text-muted-foreground flex items-center gap-2 border-t px-4 py-2.5 text-sm transition-colors {highlighted ===
+              results.length
+                ? 'bg-foreground/10'
+                : ''}"
+            >
+              <CornerDownLeft class="size-4 shrink-0" />
+              <span class="truncate">{m.search_palette_view_all({ query: trimmed })}</span>
+            </a>
+          </div>
+        {/if}
+      </div>
     </div>
   </div>
 

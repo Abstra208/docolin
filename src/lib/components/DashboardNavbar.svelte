@@ -7,6 +7,9 @@
   import InboxBell from "$lib/components/InboxBell.svelte";
   import LanguageSwitcher from "$lib/components/LanguageSwitcher.svelte";
   import ThemeToggle from "$lib/components/ThemeToggle.svelte";
+  import { commandPalette } from "$lib/client/command-palette.svelte";
+  import { isMacPlatform } from "$lib/client/platform";
+  import * as Kbd from "$lib/components/ui/kbd";
 
   // Breadcrumb-style top bar for /dashboard/* routes. Different chrome from
   // the marketing navbar so the user knows they're in admin mode. Logo +
@@ -22,6 +25,8 @@
   // A route can supply a readable label for its deepest crumb (e.g. an inbox
   // message uuid renders as "Message"); falls back to the raw segment.
   const lastLabel = $derived(page.data.breadcrumb ?? segments[segments.length - 1]);
+  // Apple shows ⌘, everything else Ctrl. False on SSR, swaps after hydration.
+  const isMac = $derived(isMacPlatform());
 </script>
 
 <header
@@ -97,12 +102,16 @@
              Select.Trigger so the two read as one cohesive control bar. -->
         <button
           type="button"
-          class="border-input inline-flex h-9 flex-1 cursor-not-allowed items-center gap-2 border bg-transparent px-3 text-sm"
+          class="border-input text-muted-foreground hover:border-foreground/30 inline-flex h-9 flex-1 cursor-pointer items-center gap-2 border bg-transparent px-3 text-sm transition-colors"
           aria-label={m.home_hero_search_label()}
-          disabled
+          onclick={() => (commandPalette.open = true)}
         >
-          <Search class="text-muted-foreground size-4" />
-          <span class="text-muted-foreground">{m.home_hero_search_placeholder()}</span>
+          <Search class="size-4 shrink-0" />
+          <span class="truncate">{m.home_hero_search_placeholder()}</span>
+          <Kbd.Group class="ml-auto">
+            <Kbd.Root>{isMac ? "⌘" : "Ctrl"}</Kbd.Root>
+            <Kbd.Root>K</Kbd.Root>
+          </Kbd.Group>
         </button>
         <LanguageSwitcher />
       </div>

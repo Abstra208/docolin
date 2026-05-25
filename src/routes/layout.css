@@ -181,6 +181,10 @@ html {
   }
   html {
     @apply font-sans;
+    /* Reserve the scrollbar gutter at all times, so opening a modal (which locks
+     * body scroll and removes the scrollbar) doesn't widen the viewport and
+     * shift the fixed navbar and page content sideways. */
+    scrollbar-gutter: stable;
     /* Firefox: thin scrollbar with neutral gray thumb on transparent track. */
     scrollbar-width: thin;
     scrollbar-color: rgb(0 0 0 / 0.2) transparent;
