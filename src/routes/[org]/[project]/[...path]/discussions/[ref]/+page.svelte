@@ -8,7 +8,7 @@
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import ShieldAlert from "@lucide/svelte/icons/shield-alert";
   import Ellipsis from "@lucide/svelte/icons/ellipsis";
-  import CircleCheck from "@lucide/svelte/icons/circle-check";
+  import MessageSquareCheck from "@lucide/svelte/icons/message-square-check";
   import Pin from "@lucide/svelte/icons/pin";
   import PinOff from "@lucide/svelte/icons/pin-off";
   import { Button } from "$lib/components/ui/button";
@@ -237,7 +237,7 @@
         <span
           class="inline-flex items-center gap-1 border border-emerald-500/40 bg-emerald-50 px-1.5 py-0.5 text-[0.65rem] font-medium tracking-wide text-emerald-700 uppercase"
         >
-          <CircleCheck class="size-3" />
+          <MessageSquareCheck class="size-3" />
           {m.discussion_answer_badge()}
         </span>
       {/if}
@@ -277,7 +277,7 @@
             {/if}
             {#if p.canMarkAnswer}
               <DropdownMenu.Item onSelect={p.onMarkAnswer}>
-                <CircleCheck class="size-4" />
+                <MessageSquareCheck class="size-4" />
                 {p.isAnswer ? m.discussion_post_unmark_answer() : m.discussion_post_mark_answer()}
               </DropdownMenu.Item>
             {/if}
@@ -493,7 +493,7 @@
         href={`#comment-${thread.answeredReplyId}`}
         class="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700 underline-offset-2 hover:underline"
       >
-        <CircleCheck class="size-4" />
+        <MessageSquareCheck class="size-4" />
         {m.discussion_answered_label()} · {m.discussion_answered_jump()}
       </a>
     {/if}

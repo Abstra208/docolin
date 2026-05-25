@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { check, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { versions } from "./docos";
 import { users } from "./users";
 
@@ -34,10 +34,17 @@ export const stamps = pgTable(
     // Correlated-source cluster assigned by the anti-abuse detector; null until
     // clustered. Stamps sharing a cluster collapse via effective sample size.
     clusterId: text("cluster_id"),
+    // Nonce of the one-time vote token this stamp was redeemed from (MCP / link
+    // verification). Null for stamps placed directly on the web. A unique index
+    // over the non-null values makes each vote token single-use.
+    voteTokenNonce: text("vote_token_nonce"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
     index("stamps_version_idx").on(t.versionId),
+    uniqueIndex("stamps_vote_token_nonce_unique")
+      .on(t.voteTokenNonce)
+      .where(sql`${t.voteTokenNonce} IS NOT NULL`),
     index("stamps_voter_idx").on(t.voterUserId),
     // Recompute dedupes to a voter's latest stamp per version.
     index("stamps_version_voter_idx").on(t.versionId, t.voterUserId),

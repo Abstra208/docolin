@@ -38,6 +38,53 @@ export function rebuildPathInSource(urlPath: string, subpath: string | null): st
   return `${base}.md`;
 }
 
+/** A specific version selected by a URL @-suffix. */
+export type VersionRef = { kind: "number"; value: number } | { kind: "sha"; value: string };
+
+function isAllDigits(s: string): boolean {
+  if (s.length === 0) return false;
+  for (const c of s) {
+    if (c < "0" || c > "9") return false;
+  }
+  return true;
+}
+
+function isAllHexLower(s: string): boolean {
+  if (s.length === 0) return false;
+  for (const c of s) {
+    const isDigit = c >= "0" && c <= "9";
+    const isHexLetter = c >= "a" && c <= "f";
+    if (!isDigit && !isHexLetter) return false;
+  }
+  return true;
+}
+
+// Splits a URL path into (path, versionRef). The version ref is only
+// recognized when the @-suffix is unambiguously a versionNumber (all digits)
+// or a commit SHA prefix (4+ lowercase hex chars). Anything else stays in the
+// path so paths containing a literal `@` aren't silently truncated. Shared by
+// the doco viewer, the raw routes, and the MCP fetch tool.
+export function parseVersionRef(urlPath: string): {
+  pathPart: string;
+  versionRef: VersionRef | null;
+} {
+  const at = urlPath.lastIndexOf("@");
+  if (at === -1 || at === urlPath.length - 1) return { pathPart: urlPath, versionRef: null };
+  const suffix = urlPath.slice(at + 1);
+  const before = urlPath.slice(0, at);
+
+  if (isAllDigits(suffix)) {
+    const n = Number.parseInt(suffix, 10);
+    if (Number.isFinite(n) && n > 0) {
+      return { pathPart: before, versionRef: { kind: "number", value: n } };
+    }
+  }
+  if (suffix.length >= 4 && suffix.length <= 40 && isAllHexLower(suffix)) {
+    return { pathPart: before, versionRef: { kind: "sha", value: suffix } };
+  }
+  return { pathPart: urlPath, versionRef: null };
+}
+
 // Public URLs for one doco across every locale paraglide is configured for.
 // Used by the cache purger so a content change invalidates every localized
 // variant of the latest URL. Versioned URLs (`...@{sha}`) are immutable and

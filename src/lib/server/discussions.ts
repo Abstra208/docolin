@@ -351,6 +351,9 @@ export interface EditVersion {
   id: string;
   editedAt: string;
   bodyHtml: string;
+  // Raw markdown of this prior version (public content, like ThreadPost
+  // bodySource); the raw markdown endpoints render the history from this.
+  bodySource: string;
   // True when this prior version was hidden / redacted: body is blanked and the
   // UI shows a "removed" placeholder, the same treatment as a removed reply.
   removed: boolean;
@@ -368,12 +371,19 @@ async function renderEditVersion(r: {
   hiddenUntil: Date | null;
 }): Promise<EditVersion> {
   if (!contentRowIsVisible(r)) {
-    return { id: r.id, editedAt: r.editedAt.toISOString(), bodyHtml: "", removed: true };
+    return {
+      id: r.id,
+      editedAt: r.editedAt.toISOString(),
+      bodyHtml: "",
+      bodySource: "",
+      removed: true,
+    };
   }
   return {
     id: r.id,
     editedAt: r.editedAt.toISOString(),
     bodyHtml: await renderMarkdown(r.priorBodyText),
+    bodySource: r.priorBodyText,
     removed: false,
   };
 }

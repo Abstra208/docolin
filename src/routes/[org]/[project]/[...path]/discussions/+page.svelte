@@ -6,7 +6,7 @@
   import Plus from "@lucide/svelte/icons/plus";
   import Search from "@lucide/svelte/icons/search";
   import Pin from "@lucide/svelte/icons/pin";
-  import CircleCheck from "@lucide/svelte/icons/circle-check";
+  import MessageSquareCheck from "@lucide/svelte/icons/message-square-check";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import DocoViewerNavbar from "$lib/components/DocoViewerNavbar.svelte";
@@ -189,7 +189,11 @@
                   <Pin class="text-muted-foreground size-3 shrink-0" />
                 {/if}
                 {#if t.isAnswered}
-                  <CircleCheck class="size-3.5 shrink-0 text-emerald-600" />
+                  <MessageSquareCheck
+                    class="size-3.5 shrink-0 text-emerald-600"
+                    role="img"
+                    aria-label={m.discussion_answered_label()}
+                  />
                 {/if}
                 <span
                   class="truncate font-medium {t.status === 'open'

@@ -1,14 +1,15 @@
 import { error, fail } from "@sveltejs/kit";
-import { and, desc, eq, inArray, like } from "drizzle-orm";
+import { and, desc, eq, like } from "drizzle-orm";
 import { dev } from "$app/environment";
 import type { Actions, PageServerLoad } from "./$types";
 import { db } from "$lib/server/db";
-import { docos as docosTable, users, versions } from "$lib/server/db/schema";
+import { docos as docosTable, versions } from "$lib/server/db/schema";
 import { fromLtree } from "$lib/server/db/schema/types";
 import { renderMarkdown, extractDocoToc } from "$lib/server/markdown";
 import { resolveDocoIdentity, resolveProjectBySlug } from "$lib/server/doco-resolve";
 import { fileDeletionRequest, submitReport } from "$lib/server/moderation";
-import { pathFromSourcePath, rebuildPathInSource } from "$lib/doco-urls";
+import { pathFromSourcePath, rebuildPathInSource, parseVersionRef } from "$lib/doco-urls";
+import { resolveAuthors, type ResolvedAuthor } from "$lib/server/authors";
 import { recordStamp } from "$lib/verification/ingest";
 import type { StampOutcome } from "$lib/verification/score";
 // Dev-only markdown playground registry, shared with the link-preview endpoint.
@@ -295,57 +296,6 @@ export const load: PageServerLoad = async ({ params, setHeaders, isDataRequest }
   };
 };
 
-// Resolved author entry shape served to the page. Discriminated by which
-// side of the union the source had: docolin user vs external attribution.
-export type ResolvedAuthor =
-  | { kind: "user"; userId: string; handle: string; displayName: string | null }
-  | { kind: "external"; name: string; username: string | null; url: string | null };
-
-async function resolveAuthors(raw: unknown): Promise<ResolvedAuthor[]> {
-  if (!Array.isArray(raw)) return [];
-
-  // First pass: classify and collect userIds for the join.
-  const out: ResolvedAuthor[] = [];
-  const userIds: string[] = [];
-  const userSlots: number[] = [];
-  for (const entry of raw) {
-    if (typeof entry !== "object" || entry === null) continue;
-    const obj = entry as Record<string, unknown>;
-    if (typeof obj.userId === "string") {
-      out.push({ kind: "user", userId: obj.userId, handle: "", displayName: null });
-      userIds.push(obj.userId);
-      userSlots.push(out.length - 1);
-    } else if (typeof obj.name === "string") {
-      out.push({
-        kind: "external",
-        name: obj.name,
-        username: typeof obj.username === "string" ? obj.username : null,
-        url: typeof obj.url === "string" ? obj.url : null,
-      });
-    }
-  }
-
-  // Second pass: hydrate handle + displayName for user entries.
-  if (userIds.length > 0) {
-    const rows = await db
-      .select({ id: users.id, handle: users.handle, displayName: users.displayName })
-      .from(users)
-      .where(inArray(users.id, userIds));
-    const map = new Map(rows.map((r) => [r.id, r]));
-    for (const slot of userSlots) {
-      const entry = out[slot];
-      if (entry.kind !== "user") continue;
-      const row = map.get(entry.userId);
-      if (row !== undefined) {
-        entry.handle = row.handle;
-        entry.displayName = row.displayName;
-      }
-    }
-  }
-
-  return out;
-}
-
 // Rich prev/next nav target. Resolved entries carry the destination's title
 // and kind so the card can render with real content; raw entries fall back
 // to the original link string when resolution fails (external URLs, kind-
@@ -437,49 +387,6 @@ function joinRelativePath(currentPath: string, relative: string): string {
   }
 
   return base.length === 0 ? rel : `${base}/${rel}`;
-}
-
-// Splits a URL path into (path, versionRef). The version ref is only
-// recognized when the @-suffix is unambiguously a versionNumber (all digits)
-// or a commit SHA prefix (4+ lowercase hex chars). Anything else stays in
-// the path so paths containing literal `@` aren't silently truncated.
-function parseVersionRef(urlPath: string): {
-  pathPart: string;
-  versionRef: { kind: "number"; value: number } | { kind: "sha"; value: string } | null;
-} {
-  const at = urlPath.lastIndexOf("@");
-  if (at === -1 || at === urlPath.length - 1) return { pathPart: urlPath, versionRef: null };
-  const suffix = urlPath.slice(at + 1);
-  const before = urlPath.slice(0, at);
-
-  if (isAllDigits(suffix)) {
-    const n = Number.parseInt(suffix, 10);
-    if (Number.isFinite(n) && n > 0) {
-      return { pathPart: before, versionRef: { kind: "number", value: n } };
-    }
-  }
-  if (suffix.length >= 4 && suffix.length <= 40 && isAllHexLower(suffix)) {
-    return { pathPart: before, versionRef: { kind: "sha", value: suffix } };
-  }
-  return { pathPart: urlPath, versionRef: null };
-}
-
-function isAllDigits(s: string): boolean {
-  if (s.length === 0) return false;
-  for (const c of s) {
-    if (c < "0" || c > "9") return false;
-  }
-  return true;
-}
-
-function isAllHexLower(s: string): boolean {
-  if (s.length === 0) return false;
-  for (const c of s) {
-    const isDigit = c >= "0" && c <= "9";
-    const isHexLetter = c >= "a" && c <= "f";
-    if (!isDigit && !isHexLetter) return false;
-  }
-  return true;
 }
 
 function fieldStr(form: FormData, key: string): string {

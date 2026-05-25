@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { db } from "$lib/server/db";
 import { stamps } from "$lib/server/db/schema";
 import type { StampOutcome } from "./score";
@@ -19,10 +20,16 @@ export interface RecordStampInput {
   note?: string | null;
   /** Coarse, salted network bucket for clustering; never a raw IP. */
   networkBucket?: string | null;
+  /** Nonce of the one-time vote token redeemed (MCP / link verification). Null
+   * for web stamps. The unique index over non-null nonces makes it single-use. */
+  voteTokenNonce?: string | null;
 }
 
-export async function recordStamp(input: RecordStampInput): Promise<{ stampId: string }> {
-  const [row] = await db
+// Returns the new stamp's id, or null when a vote-token nonce was supplied and
+// had already been redeemed (ON CONFLICT DO NOTHING on the unique nonce index).
+// Web stamps carry no nonce, so they never conflict and always return an id.
+export async function recordStamp(input: RecordStampInput): Promise<{ stampId: string } | null> {
+  const rows = await db
     .insert(stamps)
     .values({
       versionId: input.versionId,
@@ -31,7 +38,20 @@ export async function recordStamp(input: RecordStampInput): Promise<{ stampId: s
       voterUserId: input.voterUserId ?? null,
       note: input.note ?? null,
       networkBucket: input.networkBucket ?? null,
+      voteTokenNonce: input.voteTokenNonce ?? null,
     })
+    .onConflictDoNothing()
     .returning({ id: stamps.id });
-  return { stampId: row.id };
+  return rows.length > 0 ? { stampId: rows[0].id } : null;
+}
+
+/** Whether a one-time vote-token nonce has already been redeemed, so the verify
+ * page can show the spent state at load instead of only after a failed submit. */
+export async function isVoteTokenRedeemed(nonce: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: stamps.id })
+    .from(stamps)
+    .where(eq(stamps.voteTokenNonce, nonce))
+    .limit(1);
+  return rows.length > 0;
 }

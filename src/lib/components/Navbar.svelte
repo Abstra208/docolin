@@ -132,7 +132,7 @@
           {m.nav_for_projects()}
         </a>
         <a
-          href={localizeHref("/for-ai")}
+          href={localizeHref("/mcp")}
           class="text-muted-foreground hover:text-foreground hover:bg-foreground/5 px-3 py-1.5 transition-colors"
         >
           {m.nav_for_ai()}
