@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { page } from "$app/state";
   import { slide } from "svelte/transition";
   import { m } from "$paraglide/messages";
   import { getLocale, localizeHref } from "$paraglide/runtime";
@@ -529,13 +530,53 @@
     };
   });
 
+  // Copy markdown serves the exact bytes the /raw/ route does (reconstructed
+  // frontmatter + docolin.live block + body), so a paste matches a curl or MCP
+  // fetch. We hit /raw/ rather than copying doco.bodyText, which is body-only.
+  // The path is taken from the route params so a pinned @version carries through.
+  let rawMarkdown = $state<string | null>(null);
+  let rawMarkdownPromise: Promise<string> | null = null;
+
+  // Re-fetch when navigating to a different doco or version.
+  $effect(() => {
+    void doco.versionId;
+    rawMarkdown = null;
+    rawMarkdownPromise = null;
+  });
+
+  function loadRawMarkdown(): Promise<string> {
+    if (rawMarkdownPromise === null) {
+      const rawUrl = `/raw/${page.params.org ?? ""}/${page.params.project ?? ""}/${page.params.path ?? ""}`;
+      rawMarkdownPromise = fetch(rawUrl)
+        .then((res) => {
+          if (!res.ok) throw new Error(`raw markdown request failed: ${String(res.status)}`);
+          return res.text();
+        })
+        .then((text) => {
+          rawMarkdown = text;
+          return text;
+        });
+    }
+    return rawMarkdownPromise;
+  }
+
   let copiedMarkdown = $state(false);
   async function copyMarkdown(): Promise<void> {
-    await navigator.clipboard.writeText(doco.bodyText);
-    copiedMarkdown = true;
-    setTimeout(() => {
-      copiedMarkdown = false;
-    }, 2000);
+    // Prefer the already-fetched text (primed on hover/focus) so the clipboard
+    // write runs synchronously inside the click gesture, which Safari requires;
+    // otherwise fetch now and accept the network round-trip.
+    try {
+      const markdown = rawMarkdown ?? (await loadRawMarkdown());
+      await navigator.clipboard.writeText(markdown);
+      copiedMarkdown = true;
+      setTimeout(() => {
+        copiedMarkdown = false;
+      }, 2000);
+    } catch {
+      // Network, 404, or clipboard-permission failure: let the reader retry.
+      rawMarkdownPromise = null;
+      toast.error(m.doco_copy_markdown_error());
+    }
   }
 
   let versionMenuOpen = $state(false);
@@ -663,6 +704,8 @@
             <button
               type="button"
               onclick={() => void copyMarkdown()}
+              onpointerenter={() => void loadRawMarkdown()}
+              onfocus={() => void loadRawMarkdown()}
               class="border-foreground/15 hover:border-foreground/40 text-muted-foreground hover:text-foreground inline-flex cursor-pointer items-center justify-center border p-1.5 transition-colors"
               aria-label={m.doco_copy_markdown_aria()}
               title={copiedMarkdown ? m.doco_copy_markdown_done() : m.doco_copy_markdown()}

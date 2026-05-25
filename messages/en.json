@@ -503,6 +503,7 @@
   "doco_copy_markdown": "Copy markdown",
   "doco_copy_markdown_done": "Copied",
   "doco_copy_markdown_aria": "Copy this doco's markdown source",
+  "doco_copy_markdown_error": "Could not copy the markdown. Please try again.",
   "doco_meta_by": "by",
   "doco_meta_updated": "Updated {when}",
   "doco_meta_verified": "{count} verified",
