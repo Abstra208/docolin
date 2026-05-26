@@ -2,17 +2,18 @@ import { sql } from "drizzle-orm";
 import type { PageServerLoad } from "./$types";
 import { db } from "$lib/server/db";
 import { kinds } from "$lib/server/db/schema";
-import { TECHNICAL_ROOTS, GENERAL_ROOTS } from "$lib/reserved-handles";
+import { TAXONOMY_ROOTS_LIST } from "$lib/reserved-handles";
 
-// The browse landing: the taxonomy's top-level kinds as a card grid, the entry
-// point into the per-kind browse pages. The root list is a compile-time constant
-// (reserved-handles), so the only data the page needs is per-root doco counts and
-// the registry descriptions, both of which move slowly. That keeps the response
-// reader-independent and safe to cache hard at the edge: the queries below run on
-// a cache miss, not per reader, and a count being a few hours stale is fine for a
-// directory. New roots only ship with a code change, which busts the cache anyway.
+// The browse landing: the taxonomy's top-level kinds as a single alphabetical
+// card grid, the entry point into the per-kind browse pages. The root list is
+// a compile-time constant (reserved-handles), so the only data the page needs
+// is per-root doco counts and the registry descriptions, both of which move
+// slowly. That keeps the response reader-independent and safe to cache hard at
+// the edge: the queries below run on a cache miss, not per reader, and a count
+// being a few hours stale is fine for a directory. New roots only ship with a
+// code change, which busts the cache anyway.
 
-interface RootCard {
+export interface RootCard {
   root: string;
   description: string | null;
   count: number;
@@ -49,14 +50,11 @@ export const load: PageServerLoad = async ({ setHeaders, isDataRequest }) => {
   const descriptions = new Map<string, string | null>();
   for (const row of descRows) descriptions.set(row.key, row.description);
 
-  const toCard = (root: string): RootCard => ({
+  const roots: RootCard[] = TAXONOMY_ROOTS_LIST.map((root) => ({
     root,
     description: descriptions.get(root) ?? null,
     count: counts.get(root) ?? 0,
-  });
+  }));
 
-  return {
-    technical: TECHNICAL_ROOTS.map(toCard),
-    general: GENERAL_ROOTS.map(toCard),
-  };
+  return { roots };
 };

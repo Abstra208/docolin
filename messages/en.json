@@ -22,8 +22,6 @@
   "browse_meta_description": "Explore docolin by topic, from operating systems, hardware, and networking to security, programming, and beyond.",
   "browse_heading": "Browse",
   "browse_subtitle": "Browse docolin's documentation by topic.",
-  "browse_group_technical": "Technical",
-  "browse_group_general": "General knowledge",
   "browse_count_one": "{count} doco",
   "browse_count_other": "{count} docos",
 

@@ -28,31 +28,21 @@
 // Top-level paths in the kind taxonomy.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Technical roots: the launch wedge (Linux and adjacent) plus the technical
-// areas around it. These lead the browse page.
-export const TECHNICAL_ROOTS = [
-  "blog",
-  "cloud",
-  "data",
-  "devops",
-  "hardware",
-  "network",
-  "os",
-  "programming",
-  "security",
-  "software",
-  "tools",
-] as const;
-
-// General-knowledge roots: where docolin expands beyond technical docs. Reserved
-// from day one so the taxonomy can grow into them without reclaiming handles.
-export const GENERAL_ROOTS = [
+// Top-level paths in the kind taxonomy. Reserved from day one so the taxonomy
+// can grow into any of these without reclaiming handles. The browse landing
+// renders this list directly, alphabetically; membership checks elsewhere go
+// through TAXONOMY_ROOTS (the Set) below.
+export const TAXONOMY_ROOTS_LIST = [
   "agriculture",
   "art",
+  "blog",
   "business",
   "career",
+  "cloud",
   "crafts",
   "culture",
+  "data",
+  "devops",
   "economics",
   "education",
   "entertainment",
@@ -61,27 +51,32 @@ export const GENERAL_ROOTS = [
   "food",
   "gaming",
   "geography",
+  "hardware",
   "health",
   "history",
   "home",
   "language",
   "law",
   "math",
+  "network",
   "news",
+  "os",
   "outdoors",
   "parenting",
   "pets",
   "philosophy",
+  "programming",
   "psychology",
   "religion",
   "science",
+  "security",
   "society",
+  "software",
   "sports",
+  "tools",
   "travel",
   "vehicles",
 ] as const;
-
-const TAXONOMY_ROOTS_LIST = [...TECHNICAL_ROOTS, ...GENERAL_ROOTS];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SYSTEM NAMES
