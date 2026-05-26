@@ -1,5 +1,4 @@
 import { describe, it, expect } from "bun:test";
-import matter from "gray-matter";
 import { docoFrontmatterSchema } from "./frontmatter-schema";
 
 // Loose test-fixture shape: each field is optional so individual tests can
@@ -25,7 +24,6 @@ interface TestDocolinBlock {
 interface TestFrontmatter {
   title?: string;
   description?: string;
-  date?: string;
   authors?: {
     handle?: string;
     name?: string;
@@ -148,86 +146,6 @@ describe("docoFrontmatterSchema", () => {
       const fm = validFrontmatter();
       fm.docolin.kind = "fake/topic";
       expect(docoFrontmatterSchema.safeParse(fm).success).toBe(false);
-    });
-  });
-
-  describe("date field YAML quirk", () => {
-    it("accepts a Date object (YAML parses bare ISO dates that way)", () => {
-      // gray-matter → js-yaml auto-converts `date: 2026-05-14` into a JS Date.
-      // The schema must normalize that back to a string, not reject it.
-      const fm: Record<string, unknown> = {
-        ...validFrontmatter(),
-        date: new Date("2026-05-14"),
-      };
-      expect(docoFrontmatterSchema.safeParse(fm).success).toBe(true);
-    });
-
-    it("still accepts a date string when authored as `'2026-05-14'`", () => {
-      const fm = validFrontmatter();
-      fm.date = "2026-05-14";
-      expect(docoFrontmatterSchema.safeParse(fm).success).toBe(true);
-    });
-
-    it("end-to-end: gray-matter-parsed YAML with bare ISO date passes", () => {
-      // The actual production path. gray-matter feeds YAML through js-yaml,
-      // which auto-converts bare ISO dates to Date objects. The schema must
-      // accept the Date that comes out the other side.
-      const source = `---
-title: Test guide
-date: 2026-05-14
-authors:
-  - name: Tester
-docolin:
-  schema_version: 1
-  kind: tools/test/example
-  type: reference
----
-body
-`;
-      const parsed = matter(source);
-      const result = docoFrontmatterSchema.safeParse(parsed.data);
-      expect(result.success).toBe(true);
-    });
-
-    it("end-to-end: exact frontmatter from docs/frontmatter-format.md passes", () => {
-      // The real file's frontmatter, byte-for-byte. If this test passes but
-      // the running sync still fails on this file, the problem is module
-      // caching / HMR, not the schema.
-      const source = `---
-title: docolin frontmatter format
-description: How to write the YAML frontmatter that every docolin guide starts with.
-date: 2026-05-14
-authors:
-  - name: Oliver Seifert
-
-docolin:
-  schema_version: 1
-  kind: tools/docolin/frontmatter-format
-  type: reference
-
-  applies_to:
-    - docolin
-
-  language: en
-  difficulty: beginner
-  time_estimate: 10m
-
-  status: draft
-
-  aliases: [frontmatter-spec, metadata-fields, guide-metadata]
----
-body
-`;
-      const parsed = matter(source);
-      const result = docoFrontmatterSchema.safeParse(parsed.data);
-      if (!result.success) {
-        // Print issues if the test fails so the failure mode is visible.
-        console.error(
-          "schema rejected the live file frontmatter:",
-          JSON.stringify(result.error.issues, null, 2),
-        );
-      }
-      expect(result.success).toBe(true);
     });
   });
 

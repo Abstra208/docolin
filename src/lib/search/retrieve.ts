@@ -235,8 +235,11 @@ export async function searchGuides(input: SearchInput): Promise<SearchCandidate[
         (
           cand.rrf
           * (1 + 0.5 * (COALESCE(v.verification_ranking_score, ${sql.raw(String(RANKING_PRIOR_FALLBACK))}) / 1000.0))
+          -- Status weight: deprecated guides are still findable (so the reader
+          -- can follow superseded_by), but ranked under stable + needs-update so
+          -- a current guide on the same topic wins. Same weight as draft.
           * CASE v.status
-              WHEN 'stable' THEN 1.0 WHEN 'needs-update' THEN 0.85 WHEN 'draft' THEN 0.70 ELSE 1.0 END
+              WHEN 'stable' THEN 1.0 WHEN 'needs-update' THEN 0.85 WHEN 'draft' THEN 0.70 WHEN 'deprecated' THEN 0.70 ELSE 1.0 END
           * (1 + 0.15 * exp(
               -extract(epoch FROM now() - COALESCE(v.verification_last_confirmed_at, v.published_at)) / (180 * 86400)))
           * CASE WHEN ${readerParam}::text[] IS NOT NULL AND v.applies_to && ${readerParam}::text[]

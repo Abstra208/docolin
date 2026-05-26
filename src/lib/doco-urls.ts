@@ -45,7 +45,10 @@ export function rebuildPathInSource(urlPath: string, subpath: string | null): st
 }
 
 /** A specific version selected by a URL @-suffix. */
-export type VersionRef = { kind: "number"; value: number } | { kind: "sha"; value: string };
+export type VersionRef =
+  | { kind: "number"; value: number }
+  | { kind: "sha"; value: string }
+  | { kind: "tag"; value: string };
 
 function isAllDigits(s: string): boolean {
   if (s.length === 0) return false;
@@ -65,11 +68,27 @@ function isAllHexLower(s: string): boolean {
   return true;
 }
 
-// Splits a URL path into (path, versionRef). The version ref is only
-// recognized when the @-suffix is unambiguously a versionNumber (all digits)
-// or a commit SHA prefix (4+ lowercase hex chars). Anything else stays in the
-// path so paths containing a literal `@` aren't silently truncated. Shared by
-// the doco viewer, the raw routes, and the MCP fetch tool.
+// Tag-shaped: lowercase/uppercase letters, digits, and the characters git tag
+// names commonly use (`. - _ + /`). Tight enough that prose containing a
+// literal `@` is not mis-parsed as a tag.
+function isTagShaped(s: string): boolean {
+  if (s.length === 0 || s.length > 100) return false;
+  for (const c of s) {
+    const isLower = c >= "a" && c <= "z";
+    const isUpper = c >= "A" && c <= "Z";
+    const isDigit = c >= "0" && c <= "9";
+    const isPunct = c === "." || c === "-" || c === "_" || c === "+" || c === "/";
+    if (!isLower && !isUpper && !isDigit && !isPunct) return false;
+  }
+  return true;
+}
+
+// Splits a URL path into (path, versionRef). The version ref is recognized when
+// the @-suffix is unambiguously a versionNumber (all digits), a commit SHA
+// prefix (4+ lowercase hex chars), or a tag-shaped string the route can look up
+// against versions.versionTag. Anything else stays in the path so paths
+// containing a literal `@` aren't silently truncated. Shared by the doco
+// viewer, the raw routes, and the MCP fetch tool.
 export function parseVersionRef(urlPath: string): {
   pathPart: string;
   versionRef: VersionRef | null;
@@ -87,6 +106,9 @@ export function parseVersionRef(urlPath: string): {
   }
   if (suffix.length >= 4 && suffix.length <= 40 && isAllHexLower(suffix)) {
     return { pathPart: before, versionRef: { kind: "sha", value: suffix } };
+  }
+  if (isTagShaped(suffix)) {
+    return { pathPart: before, versionRef: { kind: "tag", value: suffix } };
   }
   return { pathPart: urlPath, versionRef: null };
 }

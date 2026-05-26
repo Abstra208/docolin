@@ -1,7 +1,6 @@
 ---
 title: Text, lists, and links
 description: The everyday Markdown, headings, emphasis, lists, quotes, links, images, and inline icons, that the rest of a doco hangs from.
-date: 2026-05-24
 authors:
   - name: Oliver Seifert
 
@@ -130,7 +129,7 @@ Start a line with `>`. Stack them for nested quotes.
 ## Links
 
 ```md
-[the burrow](/pangos/jungle-gym), a [friend off-site](https://example.com),
+[the burrow](/docolin/docolin/authoring/overview), a [friend off-site](https://example.com),
 and a bare URL: <https://docolin.com>.
 ```
 
@@ -178,6 +177,8 @@ Climb :mountain: to the top, fuel up on :drumstick:, then read the :book-open:.
 ```
 
 Climb :mountain: to the top, fuel up on :drumstick:, then read the :book-open:.
+
+A bare name looks in Lucide first, then falls back to Font Awesome's free packs (so brand glyphs like `:github:` work too). The inline shortcode only accepts bare names; to force a specific set on a card icon, see [Cards](./cards.md#multi-set-icons).
 
 docolin is careful about false positives: a stray colon or a time like `3:30` is left alone, and a `:rocket:` written inside `code` stays literal. The icons are rendered into the page on the server, so readers never download an icon library to see them.
 

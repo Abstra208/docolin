@@ -1,7 +1,6 @@
 ---
 title: Cards
 description: A list inside !!! cards becomes a responsive grid of linked, typed, illustrated cards.
-date: 2026-05-24
 authors:
   - name: Oliver Seifert
 
@@ -56,6 +55,32 @@ Put a list inside `!!! cards`. Each item is one card: a **title**, an optional `
 
     - [Code bars](./code-blocks.md){ icon=code }
       Every language Shiki can highlight.
+
+### Multi-set icons
+
+A bare name like `{ icon=rocket }` looks in **Lucide first**, then falls back to **Font Awesome** if Lucide doesn't have it. That covers most names, including brand glyphs (`{ icon=github }`) Lucide doesn't ship.
+
+To force a specific set, prefix the name with a short set tag joined by a hyphen:
+
+| Prefix | Set                                                                 |
+| ------ | ------------------------------------------------------------------- |
+| `fa-`  | Font Awesome (the regular outline style, like Mintlify)             |
+| `tb-`  | Tabler (resolves through Font Awesome today; see note below)        |
+| `lu-`  | Lucide (force Lucide even when a Font Awesome icon shares the name) |
+
+```md
+!!! cards { cols=2 }
+    - **Lucide-first**{ icon=zap }
+      A bare name picks Lucide if it has the glyph.
+
+    - **Force Font Awesome**{ icon=fa-bolt }
+      `fa-` forces FA's outline style, the same look Mintlify uses.
+```
+
+The prefix syntax is a hyphen, not a colon, because the inline `:icon:` shortcode in body text already uses colons as its delimiters. Inline shortcodes therefore only accept bare names; for a specific set, switch to a card.
+
+!!! note "Tabler resolution"
+    Tabler isn't bundled as a separate pack today. A `tb-name` falls through to Font Awesome, which has wide overlap with Tabler's outline glyphs. A native Tabler pack may ship later; existing `tb-` icons will then pick up the native glyph automatically.
 
 ## Typed cards
 

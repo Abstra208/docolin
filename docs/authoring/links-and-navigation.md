@@ -1,7 +1,6 @@
 ---
 title: Links & navigation
 description: Internal and external links, soft links by kind, hard and pinned URLs, prev/next, and the sidebar sitemap.
-date: 2026-05-24
 authors:
   - name: Oliver Seifert
 
@@ -34,11 +33,11 @@ A doco is rarely alone. Pango's guide to the high bar wants to point at the warm
 Ordinary Markdown links do what you expect:
 
 ```md
-A [relative link](./warm-up.md), an [anchor](#soft-links-by-kind), and an
+A [relative link](./tables.md), an [anchor](#soft-links-by-kind), and an
 [external link](https://lucide.dev).
 ```
 
-- **Relative links** (`./warm-up.md`) point within your own project; the most common kind, and the most robust, since they move with your files.
+- **Relative links** (`./tables.md`) point within your own project; the most common kind, and the most robust, since they move with your files.
 - **Anchors** (`#heading-id`) jump within a page, using the [auto-generated heading ids](./text-and-lists.md#headings).
 - **External links** open in a new tab with `rel="noopener noreferrer"` added for you.
 
@@ -52,9 +51,9 @@ docolin has a second, more powerful kind of link: a link to a **kind path** rath
 See [setting up a firewall](/network/firewall/setup).
 ```
 
-There is no special syntax; it is a normal link whose path is a [kind](./frontmatter.md#kind-required). When a reader follows it, docolin resolves that kind to the **best-matching guide for that reader's setup** and redirects there. An Ubuntu reader lands on the UFW guide; a Fedora reader on the firewalld one, from the very same link.
+There is no special syntax; it is a normal link whose path is a [kind](./frontmatter.md#kind-required). Following it opens a **browse page** that lists every guide under that kind, ranked by how well each one fits the reader's setup. An Ubuntu reader sees the UFW guide near the top; a Fedora reader sees the firewalld one. The list re-ranks itself after the page loads, so the reader's local setup never leaves their browser.
 
-Reach for a soft link when you mean "whichever guide fits the reader." Avoid sharing one verbatim when you want everyone to land on the exact same content; for that, link the hard URL it resolves to.
+Reach for a soft link when there is more than one credible answer (different distros, different versions) and you want the reader to land on the one that fits them. For a single specific guide, link the hard URL directly so every reader sees the same page.
 
 ## Hard URLs (by source)
 
@@ -64,7 +63,7 @@ A hard URL points at a specific file in a specific project, the same content for
 docolin.com/{org-or-user}/{project}/{path-from-project-root}
 ```
 
-For example, `docolin.com/cloudflare/cloudflare-docs/r2/buckets/setup`. With no version suffix, a hard URL serves the **latest published version**, the most recent commit docolin has synced and published, not necessarily the newest commit upstream. So the content only changes when a sync runs, which keeps shared links predictable.
+For example, `docolin.com/docolin/docolin/authoring/quickstart`. With no version suffix, a hard URL serves the **latest published version**, the most recent commit docolin has synced and published, not necessarily the newest commit upstream. So the content only changes when a sync runs, which keeps shared links predictable.
 
 !!! info "How docolin tells them apart"
     The first path segment decides. Because every top-level kind domain (`os`, `network`, `data`, ...) is a [reserved handle](./frontmatter.md#kind-required) that no user or org can claim, a leading `network/` is unambiguously a soft link and a leading `cloudflare/` is unambiguously a project.
@@ -74,8 +73,8 @@ For example, `docolin.com/cloudflare/cloudflare-docs/r2/buckets/setup`. With no 
 To pin to an exact version, append `@{version}`, either a commit hash or a git tag from the source repo:
 
 ```
-docolin.com/cloudflare/cloudflare-docs/r2/buckets/setup@v2.3.0
-docolin.com/cloudflare/cloudflare-docs/r2/buckets/setup@a3b4c5d
+docolin.com/docolin/docolin/authoring/quickstart@v2.3.0
+docolin.com/docolin/docolin/authoring/quickstart@a3b4c5d
 ```
 
 A pinned URL never moves, even after the guide is updated, which is what you want in a changelog or a "this worked on version X" reference.
@@ -91,6 +90,9 @@ docolin:
 ```
 
 (Every page in this guide uses them; that is the row of links below.)
+
+!!! tip "Prefer relative paths inside your project"
+    A relative `./other.md` (or a hard URL to your own project) renders as a rich card with the target's title and description. Soft links, cross-project links, and external URLs still work but render as plain links, since docolin can't resolve a title for them up front.
 
 ## The sidebar
 

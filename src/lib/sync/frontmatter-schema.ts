@@ -129,18 +129,9 @@ const docolinBlock = z
 
 // ---------- top-level frontmatter ----------
 
-// YAML parses bare ISO-date strings into JavaScript Date objects (YAML 1.1
-// timestamp resolution). The author wrote a string; we want a string.
-// Union with explicit transform on the Date branch, z.preprocess turned out
-// to be unreliable when chained with .optional() at the top level.
-const dateField = z
-  .union([z.string(), z.date().transform((d) => d.toISOString().slice(0, 10))])
-  .optional();
-
 export const docoFrontmatterSchema = z.object({
   title: z.string().min(1, "title is required"),
   description: z.string().optional(),
-  date: dateField,
   authors: z.array(authorEntry).min(1, "at least one author is required"),
   docolin: docolinBlock,
 });

@@ -1,7 +1,6 @@
 ---
 title: Code blocks
 description: Fenced, syntax-highlighted code with titles, line numbers, author highlights, reader-shareable line selection, and inline annotations.
-date: 2026-05-24
 authors:
   - name: Oliver Seifert
 

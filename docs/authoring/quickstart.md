@@ -1,7 +1,6 @@
 ---
 title: Your first doco
 description: Write a complete docolin doco from an empty file to a publishable page, one piece at a time.
-date: 2026-05-24
 authors:
   - name: Oliver Seifert
 

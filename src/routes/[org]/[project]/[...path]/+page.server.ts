@@ -5,7 +5,7 @@ import type { Actions, PageServerLoad } from "./$types";
 import { db } from "$lib/server/db";
 import { docos as docosTable, versions } from "$lib/server/db/schema";
 import { fromLtree } from "$lib/server/db/schema/types";
-import { renderMarkdown, extractDocoToc } from "$lib/server/markdown";
+import { renderMarkdown, extractDocoToc, extractReadingMinutes } from "$lib/server/markdown";
 import { resolveDocoIdentity, resolveProjectBySlug } from "$lib/server/doco-resolve";
 import { fileDeletionRequest, submitReport } from "$lib/server/moderation";
 import { pathFromSourcePath, rebuildPathInSource, parseVersionRef } from "$lib/doco-urls";
@@ -87,6 +87,7 @@ export const load: PageServerLoad = async ({ params, setHeaders, isDataRequest }
         bodyText: page.content,
         bodyHtml: await renderMarkdown(page.content),
         toc: extractDocoToc(page.content),
+        readingMinutes: extractReadingMinutes(page.content),
         prevNav: null,
         nextNav: null,
         sitemap: PANGO_SITEMAP,
@@ -147,7 +148,9 @@ export const load: PageServerLoad = async ({ params, setHeaders, isDataRequest }
       ? eq(versions.id, docoIdRow.latestPublishedVersionId ?? "")
       : versionRef.kind === "number"
         ? eq(versions.versionNumber, versionRef.value)
-        : like(versions.commitSha, `${versionRef.value}%`);
+        : versionRef.kind === "sha"
+          ? like(versions.commitSha, `${versionRef.value}%`)
+          : eq(versions.versionTag, versionRef.value);
 
   // Limit 2: enough to detect ambiguity for short SHA prefixes.
   const docoRows = await db
@@ -215,6 +218,7 @@ export const load: PageServerLoad = async ({ params, setHeaders, isDataRequest }
 
   const bodyHtml = await renderMarkdown(doco.bodyText);
   const toc = extractDocoToc(doco.bodyText);
+  const readingMinutes = extractReadingMinutes(doco.bodyText);
 
   // Resolve prev/next link strings into rich nav targets where possible:
   // relative paths and same-project hard URLs become {title, href, kindPath}.
@@ -272,6 +276,7 @@ export const load: PageServerLoad = async ({ params, setHeaders, isDataRequest }
       bodyText: doco.bodyText,
       bodyHtml,
       toc,
+      readingMinutes,
       prevNav,
       nextNav,
       sitemap: doco.sitemap,

@@ -1,7 +1,6 @@
 ---
 title: Callouts
 description: Notes, tips, and warnings that readers cannot skim past, plus collapsible hatches for the long stuff.
-date: 2026-05-24
 authors:
   - name: Oliver Seifert
 
@@ -51,7 +50,7 @@ Drop the title and the type's own name becomes the heading:
 !!! note
     Scales are self-cleaning. Please do not polish the pangolin.
 
-### The five types
+### The six types
 
 Pick by what you mean, not by which colour you like. Readers (and screen readers) learn the meanings fast, so using `danger` for a mild aside just cries wolf.
 
@@ -64,6 +63,10 @@ Pick by what you mean, not by which colour you like. Readers (and screen readers
 
 !!! tip
     A shortcut, a better way, a thing Pango wishes he'd known sooner.
+
+!!! check
+    Something is confirmed working, finished, or verified. Same green tint as
+    `tip`, but the check icon reads as "yes, this is the right thing."
 
 !!! warning
     Proceed carefully. Something here bites if you ignore it.
@@ -80,6 +83,9 @@ Pick by what you mean, not by which colour you like. Readers (and screen readers
 
 !!! tip
     A shortcut, a better way, a thing Pango wishes he'd known sooner.
+
+!!! check
+    Something is confirmed working, finished, or verified. Same green tint as `tip`, but the check icon reads as "yes, this is the right thing."
 
 !!! warning
     Proceed carefully. Something here bites if you ignore it.
@@ -166,19 +172,19 @@ Write a type docolin doesn't know and the callout falls back to a neutral box in
 ```md
 !!! mistery "Not a real type"
     `mistery` isn't a type, so this renders as a plain box. Spot the typo,
-    fix it to `mystery`... which also isn't a type. Use one of the five.
+    fix it to `mystery`... which also isn't a type. Use one of the six.
 ```
 
 !!! mistery "Not a real type"
-    `mistery` isn't a type, so this renders as a plain box. Spot the typo, fix it to `mystery`... which also isn't a type. Use one of the five.
+    `mistery` isn't a type, so this renders as a plain box. Spot the typo, fix it to `mystery`... which also isn't a type. Use one of the six.
 
 ## Gotchas
 
 - **Four spaces, always.** The body must be indented four spaces under the opener. Three spaces, or a tab that isn't four wide, and the line falls out of the callout.
-- **A blank line between callouts** keeps two stacked callouts from merging. (You can see the gaps in the five-types example above.)
+- **A blank line between callouts** keeps two stacked callouts from merging. (You can see the gaps in the six-types example above.)
 - **Don't decorate.** A page where every second paragraph is a callout has no callouts, just loud paragraphs. Save them for the things a reader truly must not miss.
 
 ## See also
 
-- [Cards](./cards.md) can be typed with the same five colours, for when the highlight is a whole linked panel rather than a line of prose.
+- [Cards](./cards.md) can be typed with the same six colours, for when the highlight is a whole linked panel rather than a line of prose.
 - [Steps](./steps-and-accordion.md) covers the accordion, a close cousin of the collapsible hatch for grouped question-and-answer content.

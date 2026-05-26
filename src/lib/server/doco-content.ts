@@ -102,7 +102,9 @@ export async function getDocoContent(
       ? eq(versions.id, docoIdRow.latestPublishedVersionId ?? "")
       : versionRef.kind === "number"
         ? eq(versions.versionNumber, versionRef.value)
-        : like(versions.commitSha, `${versionRef.value}%`);
+        : versionRef.kind === "sha"
+          ? like(versions.commitSha, `${versionRef.value}%`)
+          : eq(versions.versionTag, versionRef.value);
 
   // Limit 2 detects an ambiguous short SHA prefix (resolve as not-found rather
   // than silently pick one), mirroring the viewer.

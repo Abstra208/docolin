@@ -1,7 +1,6 @@
 ---
 title: Diagrams
 description: Flowcharts, sequence diagrams, and more from ```mermaid blocks, server-rendered as a fallback and re-drawn to match light or dark.
-date: 2026-05-24
 authors:
   - name: Oliver Seifert
 

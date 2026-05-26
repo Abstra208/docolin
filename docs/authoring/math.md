@@ -1,7 +1,6 @@
 ---
 title: Math
 description: Inline and display math written in LaTeX, rendered to HTML on the server with KaTeX.
-date: 2026-05-24
 authors:
   - name: Oliver Seifert
 

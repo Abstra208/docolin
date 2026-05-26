@@ -1,7 +1,6 @@
 ---
 title: Footnotes & annotations
 description: Footnote references collected at the bottom of the page, and inline annotations that pin a note to an exact spot.
-date: 2026-05-24
 authors:
   - name: Oliver Seifert
 

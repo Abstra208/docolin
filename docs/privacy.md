@@ -1,7 +1,6 @@
 ---
 title: docolin and your privacy
 description: What docolin collects (the minimum), what it never does (no fingerprinting, no third-party trackers, no selling your data), and how your setup profile stays on your device.
-date: 2026-05-25
 authors:
   - name: Oliver Seifert
 

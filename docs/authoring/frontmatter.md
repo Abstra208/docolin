@@ -1,7 +1,6 @@
 ---
 title: Frontmatter
 description: The YAML block at the top of every doco that says what it is, who wrote it, and where it belongs in docolin.
-date: 2026-05-24
 authors:
   - name: Oliver Seifert
 
@@ -40,7 +39,6 @@ Frontmatter has two parts: **universal** fields any Markdown tool understands, a
 # Universal layer: works with any Markdown tool
 title: ...
 description: ...
-date: ...
 authors: ...
 
 # docolin layer: namespaced so it never collides with other site frontmatter
@@ -58,18 +56,14 @@ docolin is additive. Migrating from Jekyll, Hugo, or Astro? Your existing top-le
 
 ### `title` (required)
 
-The guide's headline. Shown in search results, browser tabs, social cards, and RSS feeds.
+The guide's headline. Shown in search results and browser tabs.
 
 ### `description` (strongly encouraged)
 
-A one-sentence elevator pitch. It becomes the search snippet, the social-card text, and the summary an AI shows when it cites you through MCP. One field, three audiences, so make it specific and concrete.
-
-### `date` (optional)
-
-Original publication date in `YYYY-MM-DD` form. Useful when content was published elsewhere before being ingested into docolin.
+A one-sentence elevator pitch. It becomes the search snippet and the summary an AI shows when it cites you through MCP. One field, two audiences, so make it specific and concrete.
 
 !!! note "Planned"
-    Defaulting `date` from the file's first git commit is planned. Today the field must be set explicitly.
+    Social cards (Open Graph / Twitter), per-project RSS feeds, and the full SEO surface are planned. When they ship, `title` and `description` are what they will use.
 
 ### `authors` (required)
 
@@ -86,7 +80,7 @@ authors:
 - `{ handle: <docolin-handle> }` for contributors with a docolin account.
 - `{ name: <string>, username?: <string>, url?: <string> }` for external contributors.
 
-Each entry has exactly one of `handle` or `name`. `handle` entries resolve to the user's internal account id at parse time, so credit stays pinned to the right person even if a handle is later migrated. External entries are stored as written; docolin does not try to auto-match them to accounts.
+Each entry has exactly one of `handle` or `name`. `handle` entries resolve to the user's internal account id at parse time, so credit stays pinned to the right account. External entries are stored as written; docolin does not try to auto-match them to accounts.
 
 Authors are written by hand, not scraped from git history. A source repo that wants updated credit edits the frontmatter. Attribution flows all the way through to AI citations: when an MCP-grounded answer cites your guide, the listed authors are who it names.
 
@@ -213,7 +207,7 @@ aliases:
   - Primary-replica configuration
 ```
 
-These feed the search index as title-equivalent phrases and may show as "also known as." Use them for guide-specific alternate names ("RTX driver" for an Nvidia driver guide); platform-wide synonyms (GPU, graphics card) are handled centrally, so you do not repeat them here.
+These feed the search index as title-equivalent phrases, so a reader who searches for "Postgres replication" finds a guide titled "Set up streaming replication" too. Use aliases for guide-specific alternate names ("RTX driver" for an Nvidia driver guide); platform-wide synonyms (GPU, graphics card) are handled centrally, so you do not repeat them here.
 
 !!! note "Planned"
     A warning above 10 entries (the usual sign of keyword stuffing) is planned. Today any length is accepted silently.
@@ -228,7 +222,7 @@ references:
   - https://www.freedesktop.org/software/systemd/man/systemd.network.html
 ```
 
-docolin infers the source type from the URL and surfaces structured citations through MCP, so an AI returning your guide can chain back to what you cited. List the most authoritative source first.
+The list is surfaced through MCP alongside the doco, so an AI returning your guide can chain back to what you cited. List the most authoritative source first.
 
 ### `prev` and `next` (optional)
 
@@ -251,7 +245,6 @@ A per-doco override of the project's sidebar. Most projects define one sidebar a
 ---
 title: Set up Postgres streaming replication
 description: Configure a primary and a hot-standby Postgres node for read scaling and failover with zero downtime.
-date: 2026-05-12
 authors:
   - handle: someuser
 
@@ -281,7 +274,6 @@ docolin:
 ---
 title: How to dismount the high bar
 description: Land a high-bar dismount cleanly instead of rolling into an involuntary ball.
-date: 2026-05-24
 authors:
   - name: Pango
 
@@ -317,10 +309,11 @@ A few fields you might expect and won't find, because docolin derives them inste
 
 - **Tags**, replaced by the more focused `aliases` plus a platform-wide synonym dictionary.
 - **Verified-working stamps**, which are aggregated from real readers, not declared by the author.
-- **Created / updated timestamps** and **reading time**, derived from git history and word count.
+- **Reading time**, derived from the body's word count.
+- **Created / updated timestamps**, derived from when the file synced.
 - **Translation links**, derived from same-kind-different-language plus git timestamps.
 
 ## See also
 
 - [Links & navigation](./links-and-navigation.md) for how `kind` becomes a URL, and how `prev`/`next` and the sitemap shape the reader's path.
-- [Writing well](./writing-well.md) for choosing a `type`, plus authoring in AsciiDoc, reStructuredText, or MDX.
+- [Writing well](./writing-well.md) for choosing a `type` and structuring a doco that reads well.

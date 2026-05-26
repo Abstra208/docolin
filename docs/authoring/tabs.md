@@ -1,7 +1,6 @@
 ---
 title: Content tabs
 description: Group alternatives behind a single set of labels, with code tabs that stay in sync across the whole page.
-date: 2026-05-24
 authors:
   - name: Oliver Seifert
 

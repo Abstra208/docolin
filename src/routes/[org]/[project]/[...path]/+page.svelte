@@ -768,6 +768,9 @@
           {#if timeEstimate}
             <span class="text-muted-foreground/40"> · </span>
             <span>{timeEstimate}</span>
+          {:else}
+            <span class="text-muted-foreground/40"> · </span>
+            <span>{m.doco_meta_reading_time({ minutes: doco.readingMinutes })}</span>
           {/if}
         </div>
 

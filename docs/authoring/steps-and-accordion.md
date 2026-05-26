@@ -1,7 +1,6 @@
 ---
 title: Steps & accordion
 description: Numbered vertical steppers for sequences, and exclusive collapsible rows for question-and-answer content.
-date: 2026-05-24
 authors:
   - name: Oliver Seifert
 

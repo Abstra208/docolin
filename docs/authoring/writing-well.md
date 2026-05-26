@@ -1,7 +1,6 @@
 ---
 title: Writing well
 description: Choosing the right structure and constructs, writing accessibly, remembering that docos are public, and authoring in other formats.
-date: 2026-05-24
 authors:
   - name: Oliver Seifert
 
@@ -72,27 +71,6 @@ Two consequences for how you write:
 ## Help the machines that cite you
 
 docolin feeds AI tools through MCP, and they cite what they ground on. You make your guide a better citation with the same things that make it good for humans: a precise [`description`](./frontmatter.md#description-strongly-encouraged), accurate [`references`](./frontmatter.md#references-optional), honest [`status`](./frontmatter.md#status-required-defaults-to-stable), and clear headings. Write for the reader; the machine benefits for free.
-
-## Authoring in other formats
-
-You do not have to write Markdown. docolin reads metadata natively from other formats, so you keep your existing files and only express the frontmatter the way that format expects.
-
-Markdown and MDX use the YAML frontmatter shown throughout this guide. AsciiDoc and reStructuredText use flat attribute spaces, so the nested `docolin:` block is flattened with a `docolin-` prefix and lists become comma-separated:
-
-```adoc
-= NVIDIA driver install
-:description: Install the proprietary Nvidia driver.
-:authors: someuser
-
-:docolin-schema-version: 1
-:docolin-kind: hardware/gpu/nvidia/driver-install
-:docolin-type: how-to
-:docolin-applies-to: ubuntu >= 22.04, systemd
-:docolin-status: stable
-```
-
-!!! note "Planned"
-    Today the **frontmatter mapping** above is what's specified; full body rendering for AsciiDoc and reStructuredText, and JSX components in MDX bodies, are planned. For now, CommonMark and GFM are what render, and MDX components are stripped by the sanitizer.
 
 ## A short checklist
 

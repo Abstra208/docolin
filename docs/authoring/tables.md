@@ -1,7 +1,6 @@
 ---
 title: Tables
 description: GFM tables, with column alignment and rich cells, and the trick that turns one into a chart.
-date: 2026-05-24
 authors:
   - name: Oliver Seifert
 
@@ -74,14 +73,14 @@ Cells take inline Markdown: emphasis, `code`, links, even an inline `:icon:`.
 | ---------------- | --------------------- |
 | `pango climb`    | Goes **up**           |
 | `pango roll`     | The _involuntary_ one |
-| [docs](/welcome) | Sends you here        |
+| [docs](/docolin/docolin/authoring/overview) | Sends you here        |
 ```
 
-| Command          | What it does          |
-| ---------------- | --------------------- |
-| `pango climb`    | Goes **up**           |
-| `pango roll`     | The _involuntary_ one |
-| [docs](/welcome) | Sends you here        |
+| Command                                     | What it does          |
+| ------------------------------------------- | --------------------- |
+| `pango climb`                               | Goes **up**           |
+| `pango roll`                                | The _involuntary_ one |
+| [docs](/docolin/docolin/authoring/overview) | Sends you here        |
 
 ## From table to chart
 
