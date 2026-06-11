@@ -1,13 +1,13 @@
 import { describe, it, expect } from "bun:test";
-import { codeToHast } from "shiki";
-import { createMarkdownRenderer, extractToc, SHIKI_THEMES } from "./index.ts";
+import { highlightCode } from "$lib/markdown/highlight";
+import { createMarkdownRenderer, extractToc } from "./index.ts";
 
-// Render with a real shiki highlighter (dual-theme, like the server path). These
-// pin the HTML the doco viewer's CSS depends on, so the marked -> remark swap is a
-// parity swap, not a visual change.
-const render = createMarkdownRenderer((code, lang) =>
-  codeToHast(code, { lang, themes: SHIKI_THEMES, defaultColor: false }),
-);
+// Render with the shared production highlighter (JS regex engine, dual-theme),
+// the same one the server and the composer preview inject. These pin the HTML
+// the doco viewer's CSS depends on, and the code-block assertions double as a
+// canary: if highlighting ever degrades to the plain fallback again, the
+// "shiki"-class checks go red instead of shipping silently.
+const render = createMarkdownRenderer(highlightCode);
 
 describe("admonitions", () => {
   it("renders a callout with its type tint, icon, and title", async () => {

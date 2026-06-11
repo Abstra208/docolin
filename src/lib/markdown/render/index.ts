@@ -37,7 +37,7 @@ import { rehypeSanitizeUrls } from "./sanitize.ts";
 
 // Bump to invalidate every cached rendered page on the next read (it changes the
 // cache key); no DB backfill needed.
-export const RENDERER_VERSION = "1";
+export const RENDERER_VERSION = "2";
 
 /** Shiki dual theme: light + dark emitted together as CSS variables
  *  (`defaultColor: false`), so rendered code switches with the `.dark` class with

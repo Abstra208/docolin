@@ -229,7 +229,11 @@ async function processCode(node: Code, blockIndex: number, highlight: Highlight)
     const root = await highlight(node.value, lang);
     const first = root.children[0];
     pre = first.type === "element" ? first : fallbackPre(node.value);
-  } catch {
+  } catch (error) {
+    // A broken highlighter must never take down the doco render, so fall back
+    // to the plain source. Logged loudly: this degrades every block on the page
+    // (no colors, no line ids, no line select) and once shipped invisibly.
+    console.error(`code highlight failed (lang=${lang})`, error);
     pre = fallbackPre(node.value);
   }
   // Every block gets shareable lines (ids + a gutter number revealed on hover),

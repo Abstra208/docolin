@@ -9,13 +9,11 @@ let preview: ((source: string) => Promise<string>) | null = null;
 
 export async function renderMarkdownPreview(source: string): Promise<string> {
   if (preview === null) {
-    const [{ createMarkdownRenderer, SHIKI_THEMES }, { codeToHast }] = await Promise.all([
+    const [{ createMarkdownRenderer }, { highlightCode }] = await Promise.all([
       import("$lib/markdown/render"),
-      import("shiki"),
+      import("$lib/markdown/highlight"),
     ]);
-    preview = createMarkdownRenderer((code, lang) =>
-      codeToHast(code, { lang, themes: SHIKI_THEMES, defaultColor: false }),
-    );
+    preview = createMarkdownRenderer(highlightCode);
   }
   return preview(source);
 }

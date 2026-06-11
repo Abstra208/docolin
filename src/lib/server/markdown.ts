@@ -1,15 +1,15 @@
-import { codeToHast } from "shiki";
+import { highlightCode } from "$lib/markdown/highlight";
 import {
   createMarkdownRenderer,
   extractToc,
   RENDERER_VERSION,
-  SHIKI_THEMES,
   type TocEntry,
 } from "$lib/markdown/render";
 
 // Server markdown renderer. Builds the docomd remark/rehype pipeline (see
-// $lib/markdown/render) with a statically imported shiki highlighter; the client
-// composer preview builds the same pipeline but lazy-imports shiki. So the
+// $lib/markdown/render) with the shared shiki highlighter ($lib/markdown/highlight,
+// JS regex engine: WASM cannot compile on the deployed Worker); the client
+// composer preview builds the same pipeline from the same modules, lazily. So the
 // published doco and the preview render identically.
 //
 // Source of truth (markdown) lives in the DB; rendered HTML is computed on read
@@ -23,9 +23,7 @@ import {
 export { RENDERER_VERSION };
 export type { TocEntry };
 
-const render = createMarkdownRenderer((code, lang) =>
-  codeToHast(code, { lang, themes: SHIKI_THEMES, defaultColor: false }),
-);
+const render = createMarkdownRenderer(highlightCode);
 
 export function renderMarkdown(source: string): Promise<string> {
   return render(source);
