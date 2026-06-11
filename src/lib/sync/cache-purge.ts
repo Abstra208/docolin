@@ -19,6 +19,45 @@ import { env } from "$lib/server/env";
 // CF API caps each purge_cache call at 30 URLs.
 const PURGE_CHUNK_SIZE = 30;
 
+/** Purges the entire zone cache. Reserved for rare global invalidations (a
+ *  renderer version change re-renders every doco, so per-URL purging would
+ *  mean enumerating the whole site). Returns whether the purge succeeded so
+ *  the caller can retry later; same no-op-without-config behavior as above. */
+export async function purgeCacheEverything(): Promise<boolean> {
+  const zoneId = env.CLOUDFLARE_ZONE_ID;
+  const purgeToken = env.CLOUDFLARE_CACHE_PURGE_TOKEN;
+  if (!zoneId || !purgeToken) {
+    console.warn(
+      "Cache purge-everything skipped: CLOUDFLARE_ZONE_ID / CLOUDFLARE_CACHE_PURGE_TOKEN unset.",
+    );
+    // Treat as success so unconfigured environments (local dev) don't retry forever.
+    return true;
+  }
+  // try-catch: fetch to an external API can always fail at the network layer;
+  // the caller retries on the next cron tick.
+  try {
+    const res = await fetch(`https://api.cloudflare.com/client/v4/zones/${zoneId}/purge_cache`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${purgeToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ purge_everything: true }),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      console.error(
+        `Cache purge-everything failed (status ${res.status.toString()}): ${body.slice(0, 500)}`,
+      );
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("Cache purge-everything request threw", err);
+    return false;
+  }
+}
+
 export async function purgeCacheUrls(urls: string[]): Promise<void> {
   if (urls.length === 0) return;
 

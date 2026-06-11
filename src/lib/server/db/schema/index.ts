@@ -14,3 +14,4 @@ export * from "./sync-errors";
 export * from "./claims";
 export * from "./stamps";
 export * from "./mcp-tokens";
+export * from "./meta";
