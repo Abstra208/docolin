@@ -6,6 +6,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import HandlePicker from "$lib/components/HandlePicker.svelte";
+  import { refreshSession } from "$lib/client/session.svelte";
   import LanguageSwitcher from "$lib/components/LanguageSwitcher.svelte";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import type { PageProps } from "./$types";
@@ -102,7 +103,12 @@
         method="POST"
         use:enhance={() => {
           submitting = true;
-          return ({ update }) => {
+          return ({ update, result }) => {
+            // Success redirects client-side (no full page load), but the
+            // navbar's session store was hydrated before onboarding and
+            // would keep showing "finish setup". Refresh it alongside the
+            // navigation so the account menu lands already up to date.
+            if (result.type === "redirect") void refreshSession();
             void update().finally(() => {
               submitting = false;
             });
