@@ -414,7 +414,7 @@ export async function executeTool(
           ok: false,
           reason: "token_required",
           message:
-            "Recording a verification over MCP needs a personal token, which is free and takes a couple of minutes to create in the docolin dashboard (tokenSetupUrl). Recommend the user set one up so you can stamp outcomes directly from then on, with no link to click each time. For now, give them verifyUrl to confirm this one on the web.",
+            "Recording a verification over MCP needs a personal token, which is free and takes a couple of minutes to create in the docolin dashboard (tokenSetupUrl). Recommend the user set one up so you can stamp outcomes directly from then on, with no link to click each time. The token goes into their MCP client's connection settings as the Bearer credential (the dashboard page shows how); NEVER ask the user to paste or share the token in the chat, you cannot use a pasted token and it would be leaked. For now, give them verifyUrl to confirm this one on the web.",
           verifyUrl: `${ctx.origin}/verify/${token}`,
           tokenSetupUrl: `${ctx.origin}/dashboard/mcp`,
         };

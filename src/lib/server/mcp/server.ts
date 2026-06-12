@@ -51,7 +51,7 @@ async function handleOne(req: RpcRequest, ctx: ToolContext): Promise<RpcResponse
         protocolVersion: PROTOCOL_VERSION,
         capabilities: { tools: { listChanged: false } },
         serverInfo: SERVER_INFO,
-        instructions: buildMcpInstructions(ctx.userId !== null),
+        instructions: buildMcpInstructions(ctx.userId !== null, ctx.origin),
       });
     case "ping":
       return ok(id, {});
