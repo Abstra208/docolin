@@ -207,6 +207,29 @@ async function runInitialSync(ctx: ModeBase): Promise<SyncRunResult> {
     mintlify !== null,
     mintlify?.iconLibrary ?? "fontawesome",
   );
+
+  // A full sync is a reconciliation, not just an upsert: any live doco whose
+  // source file is no longer in the tree was removed (or moved) upstream and
+  // must be marked deleted here too. Incremental syncs learn deletions from
+  // the compare diff; this path (first sync, forced re-sync, the fallback
+  // after a truncated compare) only knows what IS present, so it sweeps the
+  // difference. Without this, a forced re-sync silently kept deleted docos
+  // alive forever.
+  const present = new Set(eligible);
+  const liveRows = await db
+    .select({ pathInSource: docos.pathInSource })
+    .from(docos)
+    .where(and(eq(docos.gitSourceId, ctx2.gitSourceId), isNull(docos.deletedAt)));
+  for (const row of liveRows) {
+    if (row.pathInSource === null || present.has(row.pathInSource)) continue;
+    const deletion = await processFileDelete(row.pathInSource, ctx2.gitSourceId);
+    if (deletion.status === "deleted") {
+      counts.deleted += 1;
+      await clearFileError(ctx2.projectId, row.pathInSource);
+      changedPaths.push(row.pathInSource);
+    }
+  }
+
   const result = await markIdle(ctx2.gitSourceId, resolvedSha, counts);
   await purgeChangedDocos(ctx2, changedPaths);
   return result;
