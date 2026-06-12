@@ -4,6 +4,7 @@ import { requireEnv } from "$lib/server/env";
 import type { RequestHandler } from "./$types";
 import { db } from "$lib/server/db";
 import { gitSources, projects } from "$lib/server/db/schema";
+import { purgeOnRendererChange } from "$lib/server/renderer-purge";
 import { syncProject } from "$lib/sync/run";
 
 // Cron-triggered sync endpoint. Picks projects with no sync in the last 24h
@@ -35,6 +36,11 @@ export const POST: RequestHandler = async ({ request, platform }) => {
   const bucket = platform.env.MEDIA_BUCKET;
 
   const startedAt = Date.now();
+
+  // A deploy that changed RENDERER_VERSION needs the edge cache flushed once;
+  // every other tick this is a single SELECT. Piggybacks on this cron because
+  // it is the most frequent scheduled entry point.
+  await purgeOnRendererChange();
 
   // Eligible: never synced, OR last sync was more than STALE_AFTER_HOURS ago.
   // Ordered by lastSyncedAt ASC NULLS FIRST so brand-new projects (NULL) and

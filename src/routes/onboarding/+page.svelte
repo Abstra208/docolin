@@ -1,10 +1,12 @@
 <script lang="ts">
   import { enhance } from "$app/forms";
   import { m } from "$paraglide/messages";
+  import { LIMITS } from "$lib/limits";
   import { localizeHref } from "$paraglide/runtime";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import HandlePicker from "$lib/components/HandlePicker.svelte";
+  import { refreshSession } from "$lib/client/session.svelte";
   import LanguageSwitcher from "$lib/components/LanguageSwitcher.svelte";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import type { PageProps } from "./$types";
@@ -81,7 +83,7 @@
     <div class="flex items-center gap-3">
       <LanguageSwitcher />
       <a
-        href="/signout"
+        href={localizeHref("/signout")}
         class="text-muted-foreground hover:text-foreground font-mono text-xs tracking-tight transition-colors"
       >
         {m.nav_sign_out()}
@@ -101,7 +103,12 @@
         method="POST"
         use:enhance={() => {
           submitting = true;
-          return ({ update }) => {
+          return ({ update, result }) => {
+            // Success redirects client-side (no full page load), but the
+            // navbar's session store was hydrated before onboarding and
+            // would keep showing "finish setup". Refresh it alongside the
+            // navigation so the account menu lands already up to date.
+            if (result.type === "redirect") void refreshSession();
             void update().finally(() => {
               submitting = false;
             });
@@ -138,7 +145,7 @@
               name="displayName"
               type="text"
               bind:value={displayName}
-              maxlength={64}
+              maxlength={LIMITS.displayName}
               class="h-11"
             />
             <p class="text-muted-foreground mt-2 text-xs">

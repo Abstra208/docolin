@@ -5,6 +5,7 @@ import { db } from "$lib/server/db";
 import { docos, versions, projects, orgs, gitSources } from "$lib/server/db/schema";
 import { verifyVoteToken } from "$lib/server/mcp/vote-token";
 import { recordStamp, isVoteTokenRedeemed } from "$lib/verification/ingest";
+import { stampNetworkBucket } from "$lib/server/stamp-bucket";
 import { pathFromSourcePath } from "$lib/doco-urls";
 import type { StampOutcome } from "$lib/verification/score";
 
@@ -61,7 +62,7 @@ export const load: PageServerLoad = async ({ params, locals, setHeaders }) => {
 const OUTCOMES = new Set<string>(["worked", "worked_with_caveats", "didnt_work"]);
 
 export const actions: Actions = {
-  default: async ({ request, params, locals }) => {
+  default: async ({ request, params, locals, getClientAddress }) => {
     const claims = await verifyVoteToken(params.token);
     if (claims === null) return fail(400, { error: "invalid" });
     const form = await request.formData();
@@ -75,7 +76,7 @@ export const actions: Actions = {
       outcome: outcome as StampOutcome,
       source: voter ? "human" : "anonymous",
       voterUserId: voter ? voter.id : null,
-      networkBucket: null,
+      networkBucket: await stampNetworkBucket(getClientAddress()),
       voteTokenNonce: claims.nonce,
     });
     // null => this token was already redeemed. Recompute is debounced by the

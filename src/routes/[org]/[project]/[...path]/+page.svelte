@@ -24,16 +24,47 @@
   import RequestDeletionDialog from "$lib/components/moderation/RequestDeletionDialog.svelte";
   import PangoScoreRail from "$lib/components/doco/PangoScoreRail.svelte";
   import StampPrompt from "$lib/components/doco/StampPrompt.svelte";
-  import { githubEditUrl } from "$lib/git/github-url";
+  import { forgeEditUrl } from "$lib/git/edit-url";
   import { trackDwell } from "$lib/client/track-dwell";
   import { recordSetup } from "$lib/client/setup-profile";
   import { session } from "$lib/client/session.svelte";
   import { toast } from "svelte-sonner";
   import type { ModerationTargetType } from "$lib/moderation-reasons";
+  import { SITE_URL } from "$lib/site";
   import type { PageProps } from "./$types";
 
   let { data }: PageProps = $props();
   const doco = $derived(data.doco);
+
+  // SEO surface: every doco page is a landing page. The canonical always
+  // points at the unversioned URL (per locale), so pinned @version views
+  // consolidate their ranking onto the living doco.
+  const canonicalUrl = $derived(
+    `${SITE_URL}${localizeHref(`/${data.org.slug}/${data.project.slug}/${doco.pathFromProjectRoot}`)}`,
+  );
+  const articleJsonLd = $derived({
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: doco.title,
+    ...(doco.description === null ? {} : { description: doco.description }),
+    inLanguage: doco.language,
+    datePublished: doco.publishedAt,
+    mainEntityOfPage: canonicalUrl,
+    url: canonicalUrl,
+    author: doco.authors.map((a) =>
+      a.kind === "user"
+        ? { "@type": "Person", name: a.displayName ?? a.handle, url: `${SITE_URL}/${a.handle}` }
+        : { "@type": "Person", name: a.name, ...(a.url === null ? {} : { url: a.url }) },
+    ),
+    publisher: { "@type": "Organization", name: "docolin", url: SITE_URL },
+  });
+  // Title/description/author names are user content; escape `<` so they can
+  // never close the script tag.
+  /* eslint-disable no-useless-escape */
+  const articleJsonLdHtml = $derived(
+    `<script type="application/ld+json">${JSON.stringify(articleJsonLd).split("<").join("\\u003c")}<\/script>`,
+  );
+  /* eslint-enable no-useless-escape */
 
   // The sidebar's ScrollArea viewport. The browser sometimes restores a stale
   // scroll position on this nested scroller after a reload, leaving the sidebar
@@ -148,7 +179,7 @@
   // docos clear it), so guard against that.
   const editHref = $derived(
     data.pathInSource !== null
-      ? githubEditUrl(data.gitSource.repoUrl, data.gitSource.defaultBranch, data.pathInSource)
+      ? forgeEditUrl(data.gitSource.repoUrl, data.gitSource.defaultBranch, data.pathInSource)
       : null,
   );
 
@@ -624,7 +655,15 @@
   <title>{doco.title} · {data.project.displayName ?? data.project.slug} · docolin</title>
   {#if doco.description}
     <meta name="description" content={doco.description} />
+    <meta property="og:description" content={doco.description} />
   {/if}
+  <link rel="canonical" href={canonicalUrl} />
+  <meta property="og:title" content={doco.title} />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content={canonicalUrl} />
+  <meta property="og:site_name" content="docolin" />
+  <!-- eslint-disable-next-line svelte/no-at-html-tags -- JSON.stringify of our own data, `<` escaped above -->
+  {@html articleJsonLdHtml}
 </svelte:head>
 
 <DocoViewerNavbar {kindSegments} {atBottom} />
@@ -634,8 +673,11 @@
 <div class="flex gap-10 px-6 pt-24 pb-10">
   <!-- Sidebar column always rendered (empty when no sitemap) so the article
        column stays at the same horizontal position regardless of project
-       config. Prevents layout shift between docos with and without sitemaps. -->
-  <aside class="sticky top-20 hidden h-[calc(100vh-6rem)] w-60 shrink-0 self-start lg:block">
+       config. Prevents layout shift between docos with and without sitemaps.
+       Height budget: 7.5rem = top-20 sticky offset (5rem) + the container's
+       pb-10 (2.5rem). A sticky element is confined to its parent's content
+       box; anything taller gets pushed up at the very bottom of the scroll. -->
+  <aside class="sticky top-20 hidden h-[calc(100vh-7.5rem)] w-60 shrink-0 self-start lg:block">
     {#if sitemap.length > 0}
       <ScrollArea bind:viewportRef={sidebarViewport} class="h-full">
         <nav class="pr-3 pb-6">

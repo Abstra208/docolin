@@ -19,11 +19,15 @@
   import DocoViewerNavbar from "$lib/components/DocoViewerNavbar.svelte";
   import StatusBadge from "$lib/components/discussions/StatusBadge.svelte";
   import Composer from "$lib/components/discussions/Composer.svelte";
+  import ReactionBar from "$lib/components/discussions/ReactionBar.svelte";
   import ReportDialog from "$lib/components/moderation/ReportDialog.svelte";
   import RequestDeletionDialog from "$lib/components/moderation/RequestDeletionDialog.svelte";
   import DeleteConfirm from "$lib/components/moderation/DeleteConfirm.svelte";
   import type { ModerationTargetType } from "$lib/moderation-reasons";
   import { session } from "$lib/client/session.svelte";
+  import { SvelteSet } from "svelte/reactivity";
+  import type { ReactionEmoji } from "$lib/reactions";
+  import { LIMITS } from "$lib/limits";
   import { relativeTime } from "$lib/relative-time";
   import { discussionRef } from "$lib/doco-urls";
   import type { ThreadReply } from "$lib/server/discussions";
@@ -37,25 +41,74 @@
   );
   const threadPath = $derived(`${discussionsBase}/${discussionRef(thread.number, thread.title)}`);
 
-  // Per-user controls. Owner checks compare the public author handle to the
-  // session handle (no server call); moderator power comes from the
-  // capabilities endpoint, fetched only when signed in (anonymous viewers
-  // can never moderate, so they skip the round-trip).
+  // Per-user overlays on the cached page: moderator capability and own
+  // reactions. Both hydrate once per (thread, user) scope; client-side
+  // navigation to another thread (or an account change) resets them, a
+  // one-shot flag would carry thread A's state onto thread B.
   let canModerate = $state(false);
   let capsFetched = false;
+  const myReactions = new SvelteSet<string>();
+  let reactionsFetched = false;
+  let hydrationScope = "";
+  $effect(() => {
+    const scope = `${thread.id}:${session.value.dbUser?.handle ?? ""}`;
+    if (scope === hydrationScope) return;
+    hydrationScope = scope;
+    canModerate = false;
+    capsFetched = false;
+    myReactions.clear();
+    reactionsFetched = false;
+  });
+
   $effect(() => {
     if (!session.loaded || session.value.dbUser === null || capsFetched) return;
     capsFetched = true;
+    const forThread = thread.id;
     void (async () => {
-      const res = await fetch(`/api/discussions/${thread.id}/capabilities`, {
+      const res = await fetch(`/api/discussions/${forThread}/capabilities`, {
         credentials: "same-origin",
       });
-      if (res.ok) {
+      if (res.ok && thread.id === forThread) {
         const caps = (await res.json()) as { canModerate: boolean };
         canModerate = caps.canModerate;
       }
     })();
   });
+
+  // Which reactions are the viewer's own. Counts arrive in the cached page
+  // payload; this per-user overlay flips optimistically on toggle. Keys:
+  // "op:heart", "{replyId}:+1".
+  $effect(() => {
+    if (!session.loaded || session.value.dbUser === null || reactionsFetched) return;
+    reactionsFetched = true;
+    const forThread = thread.id;
+    void (async () => {
+      const res = await fetch(`/api/discussions/${forThread}/reactions`, {
+        credentials: "same-origin",
+      });
+      if (res.ok && thread.id === forThread) {
+        const body = (await res.json()) as { mine: string[] };
+        for (const key of body.mine) myReactions.add(key);
+      }
+    })();
+  });
+
+  function mineFor(targetKey: string): ReadonlySet<string> {
+    const prefix = `${targetKey}:`;
+    const out = new SvelteSet<string>();
+    for (const key of myReactions) {
+      if (key.startsWith(prefix)) out.add(key.slice(prefix.length));
+    }
+    return out;
+  }
+
+  function toggleMine(targetKey: string): (emoji: ReactionEmoji) => void {
+    return (emoji) => {
+      const key = `${targetKey}:${emoji}`;
+      if (myReactions.has(key)) myReactions.delete(key);
+      else myReactions.add(key);
+    };
+  }
 
   const myHandle = $derived(session.value.dbUser?.handle ?? null);
   const signedIn = $derived(session.value.dbUser !== null);
@@ -183,6 +236,12 @@
     if (code === "reply_required") return m.discussion_error_reply_required();
     if (code === "title_required") return m.discussion_error_title_required();
     if (code === "body_required") return m.discussion_error_body_required();
+    if (code === "title_too_long") {
+      return m.discussion_error_title_too_long({ max: LIMITS.discussionTitle });
+    }
+    if (code === "body_too_long") {
+      return m.discussion_error_body_too_long({ max: LIMITS.discussionBody });
+    }
     if (code === "forbidden") return m.discussion_error_forbidden();
     if (code === undefined) return null;
     return m.discussion_error_generic();
@@ -535,7 +594,7 @@
           <Input
             name="title"
             value={thread.title}
-            maxlength={200}
+            maxlength={LIMITS.discussionTitle}
             required
             aria-label={m.discussion_compose_title_label()}
             class="h-10"
@@ -544,6 +603,7 @@
             name="body"
             value={thread.op.bodySource}
             rows={8}
+            maxlength={LIMITS.discussionBody}
             ariaLabel={m.discussion_compose_body_label()}
             placeholder={m.discussion_compose_body_placeholder()}
           />
@@ -567,6 +627,11 @@
           <!-- eslint-disable-next-line svelte/no-at-html-tags -- bodyHtml is sanitized server-side -->
           {@html thread.op.bodyHtml}
         </div>
+        <ReactionBar
+          counts={data.reactions.op ?? {}}
+          mine={mineFor("op")}
+          ontoggle={toggleMine("op")}
+        />
       {/if}
       {#if historyOpenFor === thread.op.id}
         <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -->
@@ -626,6 +691,7 @@
                 name="body"
                 value={reply.bodySource}
                 rows={5}
+                maxlength={LIMITS.discussionBody}
                 ariaLabel={m.discussion_thread_reply_heading()}
                 placeholder={m.discussion_reply_placeholder()}
               />
@@ -649,6 +715,12 @@
               <!-- eslint-disable-next-line svelte/no-at-html-tags -- bodyHtml is sanitized server-side -->
               {@html reply.bodyHtml}
             </div>
+            <ReactionBar
+              counts={data.reactions[reply.id] ?? {}}
+              mine={mineFor(reply.id)}
+              replyId={reply.id}
+              ontoggle={toggleMine(reply.id)}
+            />
           {/if}
           {#if historyOpenFor === reply.id}
             <!-- eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -->

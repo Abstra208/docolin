@@ -8,13 +8,18 @@ import {
   editReply,
   getDiscussionRef,
   getThread,
+  notifyMentions,
   notifyNewReply,
+  notifyStatusChange,
   setAnswer,
   setDiscussionStatus,
   setPinned,
   type DiscussionStatus,
 } from "$lib/server/discussions";
 import { fileDeletionRequest, submitReport } from "$lib/server/moderation";
+import { getThreadReactions, toggleReaction } from "$lib/server/reactions";
+import { isReactionEmoji } from "$lib/reactions";
+import { LIMITS, isRequestBodyTooLarge } from "$lib/limits";
 import type { ModerationTargetType } from "$lib/moderation-reasons";
 import {
   discussionRef,
@@ -93,7 +98,12 @@ export const load: PageServerLoad = async ({ params, setHeaders, isDataRequest }
 
   setHeaders({ "cache-control": isDataRequest ? CACHE_DATA_REQUEST : CACHE_LATEST });
 
-  const header = await getDocoHeader(docoIdRow.latestPublishedVersionId);
+  const [header, reactions] = await Promise.all([
+    getDocoHeader(docoIdRow.latestPublishedVersionId),
+    // Counts are public and identical for every reader, so they belong in the
+    // cached payload; the toggle action purges these URLs like a reply does.
+    getThreadReactions(thread.id),
+  ]);
 
   return {
     org: { slug: proj.orgSlug, displayName: proj.orgDisplayName },
@@ -102,6 +112,7 @@ export const load: PageServerLoad = async ({ params, setHeaders, isDataRequest }
     docoTitle: header.title ?? params.path,
     kindSegments: header.kindSegments,
     thread,
+    reactions,
   };
 };
 
@@ -170,9 +181,16 @@ export const actions = {
       redirect(303, localizeHref(`/signin?returnTo=${encodeURIComponent(here)}`));
     }
 
+    if (isRequestBodyTooLarge(request)) {
+      return fail(413, { action: "reply", error: "body_too_long" });
+    }
+
     const form = await request.formData();
     const body = fieldStr(form, "body").trim();
     if (body.length === 0) return fail(400, { action: "reply", error: "reply_required", body });
+    if (body.length > LIMITS.discussionBody) {
+      return fail(400, { action: "reply", error: "body_too_long", body });
+    }
 
     const ctx = await actionContext(params, locals.dbUser);
     if (ctx === null) return fail(404, { action: "reply", error: "generic" });
@@ -189,11 +207,20 @@ export const actions = {
     const replyUrl = `${ctx.threadUrl}#comment-${res.id}`;
     platform?.context.waitUntil(
       Promise.all([
-        notifyNewReply({
+        // Mentions first: a mentioned participant gets the mention, not both.
+        notifyMentions({
           discussionId: ctx.disc.id,
+          bodyText: body,
           threadUrl: replyUrl,
           actorUserId: userId,
-        }),
+        }).then((mentioned) =>
+          notifyNewReply({
+            discussionId: ctx.disc.id,
+            threadUrl: replyUrl,
+            actorUserId: userId,
+            excludeUserIds: mentioned,
+          }),
+        ),
         purgeCacheUrls([
           ...discussionUrls({
             orgSlug: params.org,
@@ -212,13 +239,53 @@ export const actions = {
     return { action: "reply", ok: true };
   },
 
+  // Toggle one emoji on the original post (no replyId) or a reply. Signed-out
+  // clicks land at signin and return to the thread.
+  react: async ({ request, params, locals, platform }) => {
+    if (!locals.dbUser) {
+      const here = `/${params.org}/${params.project}/${params.path}/discussions/${params.ref}`;
+      redirect(303, localizeHref(`/signin?returnTo=${encodeURIComponent(here)}`));
+    }
+
+    const form = await request.formData();
+    const emoji = fieldStr(form, "emoji");
+    const rawReplyId = fieldStr(form, "replyId");
+    const replyId = rawReplyId.length > 0 ? rawReplyId : null;
+    if (!isReactionEmoji(emoji)) return fail(400, { action: "react", error: "generic" });
+
+    const ctx = await actionContext(params, locals.dbUser);
+    if (ctx === null) return fail(404, { action: "react", error: "generic" });
+
+    const ok = await toggleReaction({
+      discussionId: ctx.disc.id,
+      replyId,
+      emoji,
+      userId: locals.dbUser.id,
+    });
+    if (!ok) return fail(404, { action: "react", error: "generic" });
+
+    // Counts render into the cached thread HTML; purge it like a reply would.
+    // The list page doesn't show reactions, so the thread URLs suffice.
+    purgeThread(platform, params, ctx);
+    return { action: "react", ok: true };
+  },
+
   editDiscussion: async ({ request, params, locals, platform }) => {
     if (!locals.dbUser) return fail(401, { action: "editDiscussion", error: "generic" });
+    if (isRequestBodyTooLarge(request)) {
+      return fail(413, { action: "editDiscussion", error: "body_too_long" });
+    }
     const form = await request.formData();
     const title = fieldStr(form, "title").trim();
     // Body stays optional on edit too, matching create.
     const body = fieldStr(form, "body").trim();
     if (title.length === 0) return fail(400, { action: "editDiscussion", error: "title_required" });
+    if (title.length > LIMITS.discussionTitle) {
+      return fail(400, { action: "editDiscussion", error: "title_too_long" });
+    }
+    if (body.length > LIMITS.discussionBody) {
+      return fail(400, { action: "editDiscussion", error: "body_too_long" });
+    }
 
     const ctx = await actionContext(params, locals.dbUser);
     if (ctx === null) return fail(404, { action: "editDiscussion", error: "generic" });
@@ -241,12 +308,18 @@ export const actions = {
 
   editReply: async ({ request, params, locals, platform }) => {
     if (!locals.dbUser) return fail(401, { action: "editReply", error: "generic" });
+    if (isRequestBodyTooLarge(request)) {
+      return fail(413, { action: "editReply", error: "body_too_long" });
+    }
     const form = await request.formData();
     const replyId = fieldStr(form, "replyId");
     const body = fieldStr(form, "body").trim();
     if (replyId.length === 0) return fail(400, { action: "editReply", error: "generic" });
     if (body.length === 0) {
       return fail(400, { action: "editReply", error: "reply_required", replyId });
+    }
+    if (body.length > LIMITS.discussionBody) {
+      return fail(400, { action: "editReply", error: "body_too_long", replyId, body });
     }
 
     const ctx = await actionContext(params, locals.dbUser);
@@ -288,6 +361,14 @@ export const actions = {
         error: res.reason,
       });
     }
+    platform?.context.waitUntil(
+      notifyStatusChange({
+        discussionId: ctx.disc.id,
+        status,
+        threadUrl: ctx.threadUrl,
+        actorUserId: locals.dbUser.id,
+      }),
+    );
     purgeThread(platform, params, ctx);
     return { action: "setStatus", ok: true };
   },
@@ -349,7 +430,9 @@ export const actions = {
     const targetType = parseThreadTargetType(fieldStr(form, "targetType"));
     const targetId = fieldStr(form, "targetId");
     const reason = fieldStr(form, "reason");
-    const details = fieldStr(form, "details").trim();
+    // Details are context for moderators, not authored content; truncating
+    // instead of erroring keeps the report flow friction-free.
+    const details = fieldStr(form, "details").trim().slice(0, LIMITS.moderationDetails);
     if (targetType === null || targetId.length === 0) {
       return fail(400, { action: "report", error: "generic" });
     }
@@ -384,7 +467,8 @@ export const actions = {
     const targetType = parseThreadTargetType(fieldStr(form, "targetType"));
     const targetId = fieldStr(form, "targetId");
     const reason = fieldStr(form, "reason");
-    const details = fieldStr(form, "details").trim();
+    // Truncated like report details: moderator context, not authored content.
+    const details = fieldStr(form, "details").trim().slice(0, LIMITS.moderationDetails);
     if (targetType === null || targetId.length === 0 || reason.length === 0) {
       return fail(400, { action: "requestDeletion", error: "generic" });
     }

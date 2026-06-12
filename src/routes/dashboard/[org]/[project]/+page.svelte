@@ -16,7 +16,7 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import { buildPerFilePrompt, buildAllErrorsPrompt, type PromptIssue } from "$lib/sync/ai-prompt";
   import { pathFromSourcePath } from "$lib/doco-urls";
-  import { githubEditUrl } from "$lib/git/github-url";
+  import { forgeEditUrl } from "$lib/git/edit-url";
 
   // URL-derived identity for the immediate-render header.
   const orgSlug = $derived(page.params.org ?? "");
@@ -261,11 +261,17 @@
       {/if}
     </div>
     {#if project}
-      <h1
-        class="text-foreground mt-4 text-3xl font-semibold tracking-tight text-balance sm:text-4xl"
-      >
-        {project.displayName ?? project.slug}
-      </h1>
+      <div class="mt-4 flex flex-wrap items-baseline justify-between gap-3">
+        <h1 class="text-foreground text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
+          {project.displayName ?? project.slug}
+        </h1>
+        <a
+          href={localizeHref(`/dashboard/${orgSlug}/${projectSlug}/settings`)}
+          class="text-muted-foreground hover:text-foreground text-sm transition-colors"
+        >
+          {m.dashboard_settings_link()}
+        </a>
+      </div>
     {:else if loadError === null}
       <!-- h-9 matches text-3xl line-height (36px), sm:h-10 matches text-4xl
            (40px). Skeleton width approximates a typical displayName. -->
@@ -469,7 +475,7 @@
                 {/if}
                 <div class="flex flex-wrap items-center gap-2 text-xs">
                   <a
-                    href={githubEditUrl(gitSource.repoUrl, gitSource.defaultBranch, fe.filePath)}
+                    href={forgeEditUrl(gitSource.repoUrl, gitSource.defaultBranch, fe.filePath)}
                     target="_blank"
                     rel="noopener noreferrer"
                     class="border-foreground/20 hover:border-foreground/40 text-foreground inline-flex items-center gap-1.5 border px-2.5 py-1 transition-colors"

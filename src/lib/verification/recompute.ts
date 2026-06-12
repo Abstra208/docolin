@@ -1,7 +1,61 @@
-import { and, desc, eq, lt } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, lt, ne } from "drizzle-orm";
 import { db } from "$lib/server/db";
 import { stamps, versions, users } from "$lib/server/db/schema";
-import { summarizeStamps } from "./recompute-core";
+import {
+  competenceWeightFromHistory,
+  summarizeStamps,
+  type VoterHistoryRow,
+} from "./recompute-core";
+
+// Track records: each voter's historical stamps next to where those versions'
+// displayed scores settled, excluding the version being recomputed (a stamp
+// must never vouch for itself). One query for all of this version's voters;
+// stateless, so a consensus shift re-judges everyone on the next recompute.
+async function voterCompetence(
+  voterIds: string[],
+  excludeVersionId: string,
+): Promise<Map<string, number>> {
+  if (voterIds.length === 0) return new Map();
+  const history = await db
+    .select({
+      voterUserId: stamps.voterUserId,
+      versionId: stamps.versionId,
+      outcome: stamps.outcome,
+      createdAt: stamps.createdAt,
+      versionScore: versions.verificationScore,
+    })
+    .from(stamps)
+    .innerJoin(versions, eq(versions.id, stamps.versionId))
+    .where(
+      and(
+        inArray(stamps.voterUserId, voterIds),
+        ne(stamps.versionId, excludeVersionId),
+        isNotNull(versions.verificationScore),
+      ),
+    );
+
+  // Only each voter's LATEST stamp per version counts, the same supersede
+  // rule the scorer applies. Without this a voter who changed their mind N
+  // times would have N entries in their own track record.
+  const latest = new Map<string, (typeof history)[number]>();
+  for (const row of history) {
+    if (row.voterUserId === null) continue;
+    const key = `${row.voterUserId}:${row.versionId}`;
+    const existing = latest.get(key);
+    if (existing === undefined || row.createdAt > existing.createdAt) latest.set(key, row);
+  }
+
+  const byVoter = new Map<string, VoterHistoryRow[]>();
+  for (const row of latest.values()) {
+    if (row.voterUserId === null || row.versionScore === null) continue;
+    const list = byVoter.get(row.voterUserId) ?? [];
+    list.push({ outcome: row.outcome, versionScore: row.versionScore });
+    byVoter.set(row.voterUserId, list);
+  }
+  return new Map(
+    [...byVoter.entries()].map(([id, rows]) => [id, competenceWeightFromHistory(rows)]),
+  );
+}
 
 // Recomputes a guide version's cached verification aggregate from the stamps
 // ledger and writes it back onto the version. Runs OFF the write path: call it
@@ -40,6 +94,7 @@ export async function recomputeVersionScore(versionId: string): Promise<void> {
       source: stamps.source,
       voterUserId: stamps.voterUserId,
       clusterId: stamps.clusterId,
+      networkBucket: stamps.networkBucket,
       createdAt: stamps.createdAt,
       voterCreatedAt: users.createdAt,
     })
@@ -47,7 +102,11 @@ export async function recomputeVersionScore(versionId: string): Promise<void> {
     .leftJoin(users, eq(users.id, stamps.voterUserId))
     .where(eq(stamps.versionId, versionId));
 
-  const summary = summarizeStamps(rows, new Date(), previousRankingScore);
+  const competenceByVoter = await voterCompetence(
+    [...new Set(rows.map((r) => r.voterUserId).filter((id): id is string => id !== null))],
+    versionId,
+  );
+  const summary = summarizeStamps(rows, new Date(), previousRankingScore, competenceByVoter);
 
   await db
     .update(versions)

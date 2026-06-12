@@ -134,6 +134,55 @@
       "when": 1779748952176,
       "tag": "0018_elite_black_bird",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1781194264113,
+      "tag": "0019_large_polaris",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1781195246754,
+      "tag": "0020_thin_hellfire_club",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1781196684397,
+      "tag": "0021_careless_harry_osborn",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1781281278009,
+      "tag": "0022_gray_franklin_storm",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1781282503173,
+      "tag": "0023_amazing_eternity",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1781291656190,
+      "tag": "0024_volatile_scorpion",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1781291670110,
+      "tag": "0025_absurd_the_initiative",
+      "breakpoints": true
     }
   ]
 }
