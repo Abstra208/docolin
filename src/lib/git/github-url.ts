@@ -69,6 +69,16 @@ export function githubEditUrl(repoUrl: string, branch: string, path: string): st
   return `${base}/edit/${encodeURIComponent(branch)}/${encodedPath}`;
 }
 
+// Web URL for the read-only blob view of a file, the "view source without
+// editing" counterpart to githubEditUrl. Shows the original file before
+// docolin's sync pipeline canonicalized it. GitHub's blob slot accepts a
+// branch name or a commit SHA interchangeably.
+export function githubBlobUrl(repoUrl: string, refValue: string, path: string): string {
+  const base = trimTrailingSlash(repoUrl);
+  const encodedPath = path.split("/").map(encodeURIComponent).join("/");
+  return `${base}/blob/${encodeURIComponent(refValue)}/${encodedPath}`;
+}
+
 // Repo-level Discussions tab. GitHub will redirect to the enable-discussions
 // prompt for owners if the repo hasn't enabled them; for readers without
 // write access it 404s. Acceptable for v1; future iterations can store a

@@ -52,3 +52,22 @@ export function codebergEditUrl(repoUrl: string, branch: string, path: string): 
   const encodedPath = path.split("/").map(encodeURIComponent).join("/");
   return `${base}/_edit/${encodeURIComponent(branch)}/${encodedPath}`;
 }
+
+/**
+ * Forgejo's read-only file view, mirroring githubBlobUrl. Unlike GitHub's
+ * `blob/` slot, Forgejo routes branches (`src/branch/`) and commits
+ * (`src/commit/`) differently, so the caller must say which kind of ref it is.
+ */
+export function codebergSourceUrl(
+  repoUrl: string,
+  ref: { branch: string } | { commit: string },
+  path: string,
+): string {
+  const base = trimTrailingSlash(repoUrl);
+  const encodedPath = path.split("/").map(encodeURIComponent).join("/");
+  const refSegment =
+    "commit" in ref
+      ? `commit/${encodeURIComponent(ref.commit)}`
+      : `branch/${encodeURIComponent(ref.branch)}`;
+  return `${base}/src/${refSegment}/${encodedPath}`;
+}
