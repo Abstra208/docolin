@@ -246,7 +246,12 @@ export async function getProfile(slug: string): Promise<Profile | null> {
       createdAt: users.createdAt,
     })
     .from(users)
-    .where(org === null ? eq(users.handle, slug) : eq(users.personalOrgId, org.id));
+    .where(
+      and(
+        isNull(users.deletedAt),
+        org === null ? eq(users.handle, slug) : eq(users.personalOrgId, org.id),
+      ),
+    );
   const user = userRows.length > 0 ? userRows[0] : null;
 
   if (user !== null) {

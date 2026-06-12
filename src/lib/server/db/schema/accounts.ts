@@ -30,6 +30,11 @@ export const users = pgTable(
     // Platform-level admin (docolin operators). Set manually in the database, no UI
     // to grant. Bypasses org/repo permissions for moderation actions.
     isPlatformAdmin: boolean("is_platform_admin").notNull().default(false),
+    // Account deletion tombstones the row instead of deleting it (authored
+    // content references it with `restrict` FKs): PII columns get scrubbed,
+    // this is set, and lookups (profiles, member-add) skip the row. See
+    // $lib/server/account.
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },

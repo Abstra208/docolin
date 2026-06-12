@@ -51,6 +51,13 @@
           </a>
         {/snippet}
       </DropdownMenu.Item>
+      <DropdownMenu.Item>
+        {#snippet child({ props })}
+          <a href={localizeHref("/dashboard/account")} {...props}>
+            {m.nav_account()}
+          </a>
+        {/snippet}
+      </DropdownMenu.Item>
       {#if dbUser.isPlatformAdmin}
         <DropdownMenu.Item>
           {#snippet child({ props })}
