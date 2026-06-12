@@ -74,13 +74,24 @@ function imageRewritePlugin(opts: BodyPipelineOptions): Plugin<[], Root> {
   };
 }
 
+// Heading anchors ride along on doc links ("./other.md#section"). Split the
+// fragment off before classifying and rewriting, so ".md" extension checks
+// (here and in the rewriters' path mapping) see the bare path, then re-attach
+// it. The rewriter callbacks therefore always receive a fragment-free URL.
+function splitFragment(url: string): { path: string; fragment: string } {
+  const hash = url.indexOf("#");
+  if (hash === -1) return { path: url, fragment: "" };
+  return { path: url.slice(0, hash), fragment: url.slice(hash) };
+}
+
 function linkRewritePlugin(opts: BodyPipelineOptions): Plugin<[], Root> {
   return () => (tree) => {
     visit(tree, "link", (node: Link) => {
-      if (isRelativeMarkdownLink(node.url)) {
-        node.url = opts.rewriteRelativeLink(node.url);
-      } else if (opts.rewriteAbsoluteLink !== undefined && isAbsoluteDocLink(node.url)) {
-        node.url = opts.rewriteAbsoluteLink(node.url);
+      const { path, fragment } = splitFragment(node.url);
+      if (isRelativeMarkdownLink(path)) {
+        node.url = opts.rewriteRelativeLink(path) + fragment;
+      } else if (opts.rewriteAbsoluteLink !== undefined && isAbsoluteDocLink(path)) {
+        node.url = opts.rewriteAbsoluteLink(path) + fragment;
       }
     });
   };

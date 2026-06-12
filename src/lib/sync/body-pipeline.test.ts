@@ -120,6 +120,26 @@ describe("convertBody still rewrites images and links", () => {
     expect(out).toContain("/notra/notra/devtools/mcp");
   });
 
+  it("rewrites a relative link that carries a fragment, keeping the fragment", async () => {
+    const out = await convertBody("See [inline code](./text-and-lists.md#inline-code).\n", {
+      rewriteImageUrl: (url) => Promise.resolve(url),
+      rewriteRelativeLink: (url) =>
+        url === "./text-and-lists.md" ? "/org/project/text-and-lists" : url,
+    });
+    expect(out).toContain("/org/project/text-and-lists#inline-code");
+    expect(out).not.toContain(".md#");
+  });
+
+  it("rewrites a Mintlify root-absolute link with a fragment, keeping the fragment", async () => {
+    const out = await convertBody("See [setup](/devtools/mcp#setup).\n", {
+      rewriteImageUrl: (url) => Promise.resolve(url),
+      rewriteRelativeLink: (url) => url,
+      rewriteAbsoluteLink: (url) => `/notra/notra${url}`,
+    });
+    expect(out).toContain("/notra/notra/devtools/mcp#setup");
+    expect(out).not.toContain("mcp#setup#");
+  });
+
   it("leaves root-absolute links alone without rewriteAbsoluteLink (docolin repos)", async () => {
     const out = await convertBody("See [fw](/network/firewall/setup).\n", {
       rewriteImageUrl: (url) => Promise.resolve(url),
