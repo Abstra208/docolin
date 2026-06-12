@@ -41,20 +41,34 @@
   );
   const threadPath = $derived(`${discussionsBase}/${discussionRef(thread.number, thread.title)}`);
 
-  // Per-user controls. Owner checks compare the public author handle to the
-  // session handle (no server call); moderator power comes from the
-  // capabilities endpoint, fetched only when signed in (anonymous viewers
-  // can never moderate, so they skip the round-trip).
+  // Per-user overlays on the cached page: moderator capability and own
+  // reactions. Both hydrate once per (thread, user) scope; client-side
+  // navigation to another thread (or an account change) resets them, a
+  // one-shot flag would carry thread A's state onto thread B.
   let canModerate = $state(false);
   let capsFetched = false;
+  const myReactions = new SvelteSet<string>();
+  let reactionsFetched = false;
+  let hydrationScope = "";
+  $effect(() => {
+    const scope = `${thread.id}:${session.value.dbUser?.handle ?? ""}`;
+    if (scope === hydrationScope) return;
+    hydrationScope = scope;
+    canModerate = false;
+    capsFetched = false;
+    myReactions.clear();
+    reactionsFetched = false;
+  });
+
   $effect(() => {
     if (!session.loaded || session.value.dbUser === null || capsFetched) return;
     capsFetched = true;
+    const forThread = thread.id;
     void (async () => {
-      const res = await fetch(`/api/discussions/${thread.id}/capabilities`, {
+      const res = await fetch(`/api/discussions/${forThread}/capabilities`, {
         credentials: "same-origin",
       });
-      if (res.ok) {
+      if (res.ok && thread.id === forThread) {
         const caps = (await res.json()) as { canModerate: boolean };
         canModerate = caps.canModerate;
       }
@@ -62,19 +76,17 @@
   });
 
   // Which reactions are the viewer's own. Counts arrive in the cached page
-  // payload; this per-user overlay hydrates once per thread (same pattern as
-  // capabilities) and flips optimistically on toggle. Keys: "op:heart",
-  // "{replyId}:+1".
-  const myReactions = new SvelteSet<string>();
-  let reactionsFetched = false;
+  // payload; this per-user overlay flips optimistically on toggle. Keys:
+  // "op:heart", "{replyId}:+1".
   $effect(() => {
     if (!session.loaded || session.value.dbUser === null || reactionsFetched) return;
     reactionsFetched = true;
+    const forThread = thread.id;
     void (async () => {
-      const res = await fetch(`/api/discussions/${thread.id}/reactions`, {
+      const res = await fetch(`/api/discussions/${forThread}/reactions`, {
         credentials: "same-origin",
       });
-      if (res.ok) {
+      if (res.ok && thread.id === forThread) {
         const body = (await res.json()) as { mine: string[] };
         for (const key of body.mine) myReactions.add(key);
       }

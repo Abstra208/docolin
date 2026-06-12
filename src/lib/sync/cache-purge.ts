@@ -30,8 +30,10 @@ export async function purgeCacheEverything(): Promise<boolean> {
     console.warn(
       "Cache purge-everything skipped: CLOUDFLARE_ZONE_ID / CLOUDFLARE_CACHE_PURGE_TOKEN unset.",
     );
-    // Treat as success so unconfigured environments (local dev) don't retry forever.
-    return true;
+    // Stay pending: a misconfigured production must keep retrying (and
+    // logging) until the secrets exist, not silently mark the purge done.
+    // Local dev doesn't run the cron, so the retry costs nothing there.
+    return false;
   }
   // try-catch: fetch to an external API can always fail at the network layer;
   // the caller retries on the next cron tick.

@@ -68,6 +68,9 @@ interface ActionContext {
 }
 
 // Shared action preamble: signed-in viewer + org + admin flag, or null.
+// Membership-gated like the load: a non-member gets the same null (-> 404)
+// for an existing org as for a missing one, so action responses can't be
+// used to probe which org slugs exist.
 async function actionContext(
   params: { org: string },
   locals: App.Locals,
@@ -76,6 +79,7 @@ async function actionContext(
   const org = await getOrgAdminView(params.org);
   if (org === null) return null;
   const viewer: Viewer = { id: locals.dbUser.id, isPlatformAdmin: locals.dbUser.isPlatformAdmin };
+  if (!viewer.isPlatformAdmin && !(await isOrgMember(org.id, viewer.id))) return null;
   return { org, viewer, isAdmin: canAdmin(org, viewer) };
 }
 
@@ -108,6 +112,9 @@ export const actions = {
   },
 
   removeMember: async ({ request, params, locals }) => {
+    if (isRequestBodyTooLarge(request)) {
+      return fail(413, { action: "removeMember", error: "generic" });
+    }
     const ctx = await actionContext(params, locals);
     if (ctx === null) return fail(404, { action: "removeMember", error: "generic" });
     if (!ctx.isAdmin) return fail(403, { action: "removeMember", error: "forbidden" });
@@ -131,6 +138,9 @@ export const actions = {
   },
 
   deleteOrg: async ({ request, params, locals }) => {
+    if (isRequestBodyTooLarge(request)) {
+      return fail(413, { action: "deleteOrg", error: "generic" });
+    }
     const ctx = await actionContext(params, locals);
     if (ctx === null) return fail(404, { action: "deleteOrg", error: "generic" });
     if (!ctx.isAdmin) return fail(403, { action: "deleteOrg", error: "forbidden" });

@@ -18,5 +18,14 @@ describe("networkPrefix", () => {
     expect(networkPrefix("")).toBeNull();
     expect(networkPrefix("not-an-ip")).toBeNull();
     expect(networkPrefix("10.0.0")).toBeNull();
+    expect(networkPrefix("1.2.3.xyz")).toBeNull();
+    expect(networkPrefix("999.1.1.1")).toBeNull();
+    expect(networkPrefix("gggg:db8:1::1")).toBeNull();
+    expect(networkPrefix("a:b")).toBeNull();
+  });
+
+  it("accepts compressed IPv6", () => {
+    expect(networkPrefix("::1")).toBe("::1");
+    expect(networkPrefix("fe80::1")).toBe("fe80::1");
   });
 });

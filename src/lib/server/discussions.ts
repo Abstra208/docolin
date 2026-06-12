@@ -642,14 +642,20 @@ export async function setPinned(args: {
 // claim-notification convention); linkUrl is the raw path, localized at
 // render time. Run via waitUntil so it never blocks the write response.
 // The thread's participants (the original poster + everyone who replied),
-// minus the acting user: the recipient set for thread-level notifications.
+// minus the acting user and minus tombstoned accounts (a deleted user has no
+// inbox to notify): the recipient set for thread-level notifications.
 async function threadParticipants(
   discussionId: string,
   actorUserId: string,
 ): Promise<{ title: string; recipients: Set<string> } | null> {
   const dRows = await db
-    .select({ author: discussions.createdByUserId, title: discussions.title })
+    .select({
+      author: discussions.createdByUserId,
+      title: discussions.title,
+      authorDeletedAt: users.deletedAt,
+    })
     .from(discussions)
+    .innerJoin(users, eq(users.id, discussions.createdByUserId))
     .where(eq(discussions.id, discussionId))
     .limit(1);
   if (dRows.length === 0) return null;
@@ -657,9 +663,11 @@ async function threadParticipants(
   const priorAuthors = await db
     .selectDistinct({ u: discussionReplies.createdByUserId })
     .from(discussionReplies)
-    .where(eq(discussionReplies.discussionId, discussionId));
+    .innerJoin(users, eq(users.id, discussionReplies.createdByUserId))
+    .where(and(eq(discussionReplies.discussionId, discussionId), isNull(users.deletedAt)));
 
-  const recipients = new Set<string>([dRows[0].author]);
+  const recipients = new Set<string>();
+  if (dRows[0].authorDeletedAt === null) recipients.add(dRows[0].author);
   for (const r of priorAuthors) recipients.add(r.u);
   recipients.delete(actorUserId);
   return { title: dRows[0].title, recipients };

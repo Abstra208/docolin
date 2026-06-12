@@ -3,6 +3,7 @@ import {
   type AnyPgColumn,
   boolean,
   check,
+  foreignKey,
   index,
   integer,
   pgTable,
@@ -105,6 +106,8 @@ export const discussionReplies = pgTable(
   },
   (t) => [
     index("discussion_replies_discussion_idx").on(t.discussionId),
+    // Target for the reactions composite FK (reply must belong to thread).
+    uniqueIndex("discussion_replies_id_discussion_unique").on(t.id, t.discussionId),
     index("discussion_replies_created_at_idx").on(t.createdAt),
     index("discussion_replies_hidden_idx").on(t.hiddenAt),
   ],
@@ -188,10 +191,9 @@ export const discussionReactions = pgTable(
       .references(() => discussions.id, { onDelete: "cascade" }),
     // Null targets the original post; set targets one reply. discussion_id is
     // carried on reply reactions too, so a whole thread's reactions are one
-    // indexed query.
-    discussionReplyId: uuid("discussion_reply_id").references(() => discussionReplies.id, {
-      onDelete: "cascade",
-    }),
+    // indexed query. The composite FK below (not a plain column reference)
+    // forces the reply to belong to THIS discussion at the DB level.
+    discussionReplyId: uuid("discussion_reply_id"),
     emoji: text("emoji").notNull().$type<ReactionEmoji>(),
     // Cascade (unlike authored content's restrict): reactions are weightless
     // social signals, fine to vanish with the account.
@@ -206,6 +208,14 @@ export const discussionReactions = pgTable(
     unique("discussion_reactions_unique")
       .on(t.discussionId, t.discussionReplyId, t.emoji, t.createdByUserId)
       .nullsNotDistinct(),
+    // (reply, discussion) -> the reply's own (id, discussion_id): a reaction
+    // can never point a reply at a foreign thread. MATCH SIMPLE skips the
+    // check when reply id is null (an original-post reaction).
+    foreignKey({
+      name: "discussion_reactions_reply_discussion_fk",
+      columns: [t.discussionReplyId, t.discussionId],
+      foreignColumns: [discussionReplies.id, discussionReplies.discussionId],
+    }).onDelete("cascade"),
     index("discussion_reactions_discussion_idx").on(t.discussionId),
     check(
       "discussion_reactions_emoji_check",

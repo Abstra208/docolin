@@ -19,7 +19,9 @@ async function voterCompetence(
   const history = await db
     .select({
       voterUserId: stamps.voterUserId,
+      versionId: stamps.versionId,
       outcome: stamps.outcome,
+      createdAt: stamps.createdAt,
       versionScore: versions.verificationScore,
     })
     .from(stamps)
@@ -32,8 +34,19 @@ async function voterCompetence(
       ),
     );
 
-  const byVoter = new Map<string, VoterHistoryRow[]>();
+  // Only each voter's LATEST stamp per version counts, the same supersede
+  // rule the scorer applies. Without this a voter who changed their mind N
+  // times would have N entries in their own track record.
+  const latest = new Map<string, (typeof history)[number]>();
   for (const row of history) {
+    if (row.voterUserId === null) continue;
+    const key = `${row.voterUserId}:${row.versionId}`;
+    const existing = latest.get(key);
+    if (existing === undefined || row.createdAt > existing.createdAt) latest.set(key, row);
+  }
+
+  const byVoter = new Map<string, VoterHistoryRow[]>();
+  for (const row of latest.values()) {
     if (row.voterUserId === null || row.versionScore === null) continue;
     const list = byVoter.get(row.voterUserId) ?? [];
     list.push({ outcome: row.outcome, versionScore: row.versionScore });

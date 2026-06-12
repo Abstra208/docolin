@@ -95,13 +95,16 @@ export async function deleteAccount(userId: string): Promise<DeleteAccountResult
 
   // WorkOS first: if this fails nothing changed locally and the user can
   // retry. The reverse order would leave scrubbed local rows pointing at a
-  // live WorkOS identity that can sign in again.
-  // try-catch: external API call; network failure must become a retryable
-  // error, not a crash.
+  // live WorkOS identity whose deletion could never be retried (the link is
+  // gone), keeping PII at WorkOS forever.
+  // try-catch: external API call; network failure or timeout must become a
+  // retryable error, not a crash.
   try {
     const res = await fetch(`https://api.workos.com/user_management/users/${workosUserId}`, {
       method: "DELETE",
       headers: { authorization: `Bearer ${requireEnv("WORKOS_API_KEY")}` },
+      // A hung upstream must not pin the request handler open.
+      signal: AbortSignal.timeout(10_000),
     });
     // 404 means the WorkOS side is already gone; that's fine for our goal.
     if (!res.ok && res.status !== 404) {
@@ -114,13 +117,35 @@ export async function deleteAccount(userId: string): Promise<DeleteAccountResult
   }
 
   const tombstoneTag = randomUUID();
-  await db.transaction(async (tx) => {
+  const outcome = await db.transaction(async (tx): Promise<"done" | "raced"> => {
+    // Re-check the blockers inside the transaction: a project or org created
+    // between the pre-check and here must abort the scrub, or the personal-org
+    // delete below would cascade it away. The WorkOS side is already gone at
+    // this point (rare, loud, and recoverable: the data survives), the
+    // reverse ordering would lose PII deletion instead, see above.
+    const [adminOrgRows, personalProjects] = await Promise.all([
+      tx
+        .select({ id: orgs.id })
+        .from(orgs)
+        .where(
+          personalOrgId === null
+            ? eq(orgs.adminUserId, userId)
+            : and(eq(orgs.adminUserId, userId), ne(orgs.id, personalOrgId)),
+        ),
+      personalOrgId === null
+        ? Promise.resolve([])
+        : tx
+            .select({ id: projects.id })
+            .from(projects)
+            .where(eq(projects.ownerOrgId, personalOrgId)),
+    ]);
+    if (adminOrgRows.length > 0 || personalProjects.length > 0) return "raced";
     // Private data goes for real.
     await tx.delete(inboxMessages).where(eq(inboxMessages.userId, userId));
     await tx.delete(mcpTokens).where(eq(mcpTokens.userId, userId));
     await tx.delete(orgMembers).where(eq(orgMembers.userId, userId));
-    // The personal org dies with the account (it has no projects, checked
-    // above). users.personal_org_id is ON DELETE SET NULL.
+    // The personal org dies with the account (re-checked empty just above).
+    // users.personal_org_id is ON DELETE SET NULL.
     if (personalOrgId !== null) await tx.delete(orgs).where(eq(orgs.id, personalOrgId));
     // Tombstone: scrubbed but referencable. The unique columns get tagged
     // values so re-registration of the freed handle/email works.
@@ -136,6 +161,13 @@ export async function deleteAccount(userId: string): Promise<DeleteAccountResult
         updatedAt: new Date(),
       })
       .where(eq(users.id, userId));
+    return "done";
   });
+  if (outcome === "raced") {
+    console.error(
+      `Account deletion aborted mid-flight for user ${userId}: blockers appeared after the WorkOS user was already deleted. Local data preserved; needs manual follow-up.`,
+    );
+    return { ok: false, reason: "blocked" };
+  }
   return { ok: true };
 }

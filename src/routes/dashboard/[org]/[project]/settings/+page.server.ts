@@ -73,6 +73,9 @@ export const actions = {
   },
 
   deleteProject: async ({ request, params, locals, platform }) => {
+    if (isRequestBodyTooLarge(request)) {
+      return fail(413, { action: "deleteProject", error: "generic" });
+    }
     const ctx = await adminProjectCtx(params, locals);
     if (ctx === null) return fail(404, { action: "deleteProject", error: "generic" });
 

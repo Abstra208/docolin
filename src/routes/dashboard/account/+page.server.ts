@@ -35,6 +35,9 @@ export const actions = {
 
   deleteAccount: async ({ request, locals }) => {
     if (!locals.dbUser) return fail(401, { action: "deleteAccount", error: "generic" });
+    if (isRequestBodyTooLarge(request)) {
+      return fail(413, { action: "deleteAccount", error: "generic" });
+    }
 
     const form = await request.formData();
     if (fieldStr(form, "confirmHandle").trim().replace("@", "") !== locals.dbUser.handle) {

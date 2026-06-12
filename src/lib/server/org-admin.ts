@@ -146,12 +146,20 @@ export async function renameOrg(orgId: string, displayName: string | null): Prom
 export type DeleteOrgResult = { ok: true } | { ok: false; reason: "has_projects" | "is_personal" };
 
 /** Deletes an empty, non-personal org. Projects must be deleted first (their
- *  own deliberate, type-to-confirm act); personal orgs die with the account. */
+ *  own deliberate, type-to-confirm act); personal orgs die with the account.
+ *  Check and delete run in one transaction: a pre-read gate would let a
+ *  project created between check and delete be cascaded away. */
 export async function deleteOrg(org: OrgAdminView): Promise<DeleteOrgResult> {
-  if (org.projectCount > 0) return { ok: false, reason: "has_projects" };
-  if (org.isPersonal) return { ok: false, reason: "is_personal" };
-  await db.delete(orgs).where(eq(orgs.id, org.id));
-  return { ok: true };
+  return await db.transaction(async (tx) => {
+    const [projectRows, personalRows] = await Promise.all([
+      tx.select({ n: count() }).from(projects).where(eq(projects.ownerOrgId, org.id)),
+      tx.select({ id: users.id }).from(users).where(eq(users.personalOrgId, org.id)),
+    ]);
+    if ((projectRows[0]?.n ?? 0) > 0) return { ok: false, reason: "has_projects" as const };
+    if (personalRows.length > 0) return { ok: false, reason: "is_personal" as const };
+    await tx.delete(orgs).where(eq(orgs.id, org.id));
+    return { ok: true as const };
+  });
 }
 
 export async function renameProject(projectId: string, displayName: string | null): Promise<void> {

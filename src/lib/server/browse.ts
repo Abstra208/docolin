@@ -138,20 +138,21 @@ export async function getBrowseFeed(now: Date = new Date()): Promise<BrowseFeed>
 
   let trending: TrendingDoco[] = [];
   if (activity.size >= MIN_TRENDING) {
-    const top = [...activity.entries()]
-      .sort((a, b) => score(b[1]) - score(a[1]))
-      .slice(0, TRENDING_LIMIT);
+    // Resolve EVERY active doco before applying the cutoff: slicing first
+    // would let unlistable docos (deleted upstream, deprecated) occupy top
+    // slots and then vanish, wrongly forcing the all-time fallback.
+    const ranked = [...activity.entries()].sort((a, b) => score(b[1]) - score(a[1]));
     const rows = await listedRows().where(
       inArray(
         latestVersions.docoId,
-        top.map(([id]) => id),
+        ranked.map(([id]) => id),
       ),
     );
     const byId = new Map(rows.map((r) => [r.docoId, r]));
-    for (const [id, a] of top) {
+    for (const [id, a] of ranked) {
+      if (trending.length >= TRENDING_LIMIT) break;
       const row = byId.get(id);
-      // A doco can have window activity but no live latest version (deleted
-      // upstream, deprecated); it just drops out of the list.
+      // Window activity but no live latest version: drops out of the list.
       if (row === undefined) continue;
       trending.push({
         ...toListedDoco(row),

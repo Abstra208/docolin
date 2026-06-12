@@ -15,6 +15,11 @@ describe("parseCodebergUrl", () => {
       owner: "owner",
       repo: "repo",
     });
+    // The order trap: a trailing slash AFTER .git must still strip both.
+    expect(parseCodebergUrl("https://codeberg.org/owner/repo.git/")).toEqual({
+      owner: "owner",
+      repo: "repo",
+    });
   });
 
   it("rejects other hosts and sub-paths", () => {

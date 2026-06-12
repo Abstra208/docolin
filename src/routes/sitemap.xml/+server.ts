@@ -1,4 +1,4 @@
-import { and, eq, isNull, isNotNull } from "drizzle-orm";
+import { and, eq, isNull, isNotNull, ne } from "drizzle-orm";
 import type { RequestHandler } from "./$types";
 import { db } from "$lib/server/db";
 import {
@@ -76,8 +76,15 @@ export const GET: RequestHandler = async ({ setHeaders }) => {
       .innerJoin(docos, and(eq(docos.id, latestVersions.docoId), isNull(docos.deletedAt)))
       .innerJoin(projects, eq(projects.id, docos.projectId))
       .innerJoin(orgs, eq(orgs.id, projects.ownerOrgId))
-      .leftJoin(gitSources, eq(gitSources.projectId, projects.id)),
-    db.selectDistinct({ kind: latestVersions.kind }).from(latestVersions),
+      .leftJoin(gitSources, eq(gitSources.projectId, projects.id))
+      // Same listable predicate as browse/search: deprecated docos stay
+      // reachable but don't get advertised to crawlers.
+      .where(ne(latestVersions.status, "deprecated")),
+    db
+      .selectDistinct({ kind: latestVersions.kind })
+      .from(latestVersions)
+      .innerJoin(docos, and(eq(docos.id, latestVersions.docoId), isNull(docos.deletedAt)))
+      .where(ne(latestVersions.status, "deprecated")),
     db
       .select({
         number: discussions.number,

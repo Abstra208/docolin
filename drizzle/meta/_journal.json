@@ -169,6 +169,13 @@
       "when": 1781282503173,
       "tag": "0023_amazing_eternity",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1781291342420,
+      "tag": "0024_lethal_paladin",
+      "breakpoints": true
     }
   ]
 }

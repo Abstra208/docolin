@@ -22,6 +22,9 @@ export function parseCodebergUrl(input: string): ParsedCodebergRepo | null {
   else if (trimmed.startsWith(SSH_PREFIX)) path = trimmed.slice(SSH_PREFIX.length);
   else return null;
 
+  // Slashes first, then .git, then slashes again: "repo.git/" must land on
+  // "repo", not "repo.git".
+  while (path.endsWith("/")) path = path.slice(0, -1);
   if (path.endsWith(GIT_SUFFIX)) path = path.slice(0, -GIT_SUFFIX.length);
   while (path.endsWith("/")) path = path.slice(0, -1);
 

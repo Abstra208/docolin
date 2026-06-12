@@ -25,9 +25,14 @@ export const LIMITS = {
 const MAX_WRITE_BODY_BYTES = 256 * 1024;
 
 /** Whether a write request's declared body exceeds the accepted size. Browsers
- *  always send content-length for form posts; a missing header passes (the
- *  field-level limits still apply after parsing). */
+ *  always send content-length for form posts; a MISSING header passes (some
+ *  legitimate proxies and chunked clients omit it, the platform caps bodies,
+ *  and the field-level limits still apply after parsing), but a present,
+ *  unparseable one is rejected, there is no honest reading of garbage. */
 export function isRequestBodyTooLarge(request: Request): boolean {
-  const length = Number(request.headers.get("content-length") ?? "0");
-  return Number.isFinite(length) && length > MAX_WRITE_BODY_BYTES;
+  const raw = request.headers.get("content-length");
+  if (raw === null) return false;
+  const length = Number(raw);
+  if (!Number.isInteger(length) || length < 0) return true;
+  return length > MAX_WRITE_BODY_BYTES;
 }
