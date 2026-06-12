@@ -1,5 +1,10 @@
 import { describe, it, expect } from "bun:test";
-import { parseCodebergUrl, canonicalCodebergUrl, codebergEditUrl } from "./codeberg-url";
+import {
+  parseCodebergUrl,
+  canonicalCodebergUrl,
+  codebergEditUrl,
+  codebergSourceUrl,
+} from "./codeberg-url";
 
 describe("parseCodebergUrl", () => {
   it("accepts https, http, ssh, .git suffix, and trailing slashes", () => {
@@ -38,5 +43,14 @@ describe("URL building", () => {
     expect(codebergEditUrl("https://codeberg.org/owner/repo", "main", "docs/a b.md")).toBe(
       "https://codeberg.org/owner/repo/_edit/main/docs/a%20b.md",
     );
+  });
+
+  it("routes the source view by ref kind: src/branch vs src/commit", () => {
+    expect(
+      codebergSourceUrl("https://codeberg.org/owner/repo", { branch: "main" }, "docs/a.md"),
+    ).toBe("https://codeberg.org/owner/repo/src/branch/main/docs/a.md");
+    expect(
+      codebergSourceUrl("https://codeberg.org/owner/repo", { commit: "abc123" }, "docs/a.md"),
+    ).toBe("https://codeberg.org/owner/repo/src/commit/abc123/docs/a.md");
   });
 });

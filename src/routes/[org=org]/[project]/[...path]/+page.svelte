@@ -187,10 +187,19 @@
 
   // Read-only counterpart to editHref: the original file on the forge, before
   // canonicalization, so authors can diff it against /raw/ when a render
-  // surprises them.
+  // surprises them. Pinned to the displayed version's commit (the branch may
+  // have moved past the last sync, and pinned @version views show old
+  // content); falls back to the default branch for pre-sync rows without a
+  // recorded commit.
   const sourceHref = $derived(
     data.pathInSource !== null
-      ? forgeSourceUrl(data.gitSource.repoUrl, data.gitSource.defaultBranch, data.pathInSource)
+      ? forgeSourceUrl(
+          data.gitSource.repoUrl,
+          doco.commitSha !== null
+            ? { commit: doco.commitSha }
+            : { branch: data.gitSource.defaultBranch },
+          data.pathInSource,
+        )
       : null,
   );
   const sourceForgeName = $derived(forgeName(data.gitSource.repoUrl));
@@ -630,8 +639,20 @@
       .then((text) => {
         rawMarkdown = text;
         return text;
+      })
+      .catch((error: unknown) => {
+        // Don't cache a transient failure: a hover prefetch that hit a network
+        // blip would otherwise make every later copy replay the rejection.
+        rawMarkdownPromise = null;
+        throw error;
       });
     return rawMarkdownPromise;
+  }
+
+  // Hover/focus priming is fire-and-forget; a failure here is not an action
+  // the reader took, so it stays silent and the click path retries and toasts.
+  function prefetchRawMarkdown(): void {
+    loadRawMarkdown().catch(() => undefined);
   }
 
   let copiedMarkdown = $state(false);
@@ -768,9 +789,13 @@
                   </button>
                 {/snippet}
               </DropdownMenu.Trigger>
+              <!-- w-auto overrides the component's anchor-width sizing: the
+                   trigger is a tiny icon button, so anchor width would clamp
+                   the panel to min-w and clip longer items like
+                   "View source on Codeberg". -->
               <DropdownMenu.Content
                 align="end"
-                class="min-w-48 whitespace-nowrap"
+                class="w-auto min-w-48 whitespace-nowrap"
                 preventScroll={false}
               >
                 <!-- The canonicalized markdown this page renders from; pinned
@@ -832,8 +857,8 @@
               onauxclick={(event) => {
                 if (event.button === 1) window.open(rawHref, "_blank", "noopener");
               }}
-              onpointerenter={() => void loadRawMarkdown()}
-              onfocus={() => void loadRawMarkdown()}
+              onpointerenter={prefetchRawMarkdown}
+              onfocus={prefetchRawMarkdown}
               class="border-foreground/15 hover:border-foreground/40 text-muted-foreground hover:text-foreground inline-flex cursor-pointer items-center justify-center border p-1.5 transition-colors"
               aria-label={modifierHeld ? m.doco_view_raw() : m.doco_copy_markdown_aria()}
               title={modifierHeld
