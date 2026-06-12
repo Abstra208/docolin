@@ -557,6 +557,8 @@
   "doco_discussions_cta_action": "Diskussionen öffnen",
   "doco_edit_on_github": "Diese Seite im Quell-Repo bearbeiten",
   "doco_actions_more": "Weitere Aktionen",
+  "doco_view_raw": "Markdown-Rohtext ansehen",
+  "doco_view_source": "Quelldatei auf {forge} ansehen",
   "doco_report": "Dieses Doc melden",
   "doco_request_deletion": "Löschung anfragen",
   "discussion_list_meta_title": "Diskussionen",

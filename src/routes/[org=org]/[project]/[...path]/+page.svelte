@@ -14,6 +14,8 @@
   import MessagesSquare from "@lucide/svelte/icons/messages-square";
   import Pencil from "@lucide/svelte/icons/pencil";
   import Ellipsis from "@lucide/svelte/icons/ellipsis";
+  import ExternalLink from "@lucide/svelte/icons/external-link";
+  import FileCode from "@lucide/svelte/icons/file-code";
   import Flag from "@lucide/svelte/icons/flag";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import PawPrint from "@lucide/svelte/icons/paw-print";
@@ -24,7 +26,7 @@
   import RequestDeletionDialog from "$lib/components/moderation/RequestDeletionDialog.svelte";
   import PangoScoreRail from "$lib/components/doco/PangoScoreRail.svelte";
   import StampPrompt from "$lib/components/doco/StampPrompt.svelte";
-  import { forgeEditUrl } from "$lib/git/edit-url";
+  import { forgeEditUrl, forgeName, forgeSourceUrl } from "$lib/git/edit-url";
   import { trackDwell } from "$lib/client/track-dwell";
   import { recordSetup } from "$lib/client/setup-profile";
   import { session } from "$lib/client/session.svelte";
@@ -182,6 +184,16 @@
       ? forgeEditUrl(data.gitSource.repoUrl, data.gitSource.defaultBranch, data.pathInSource)
       : null,
   );
+
+  // Read-only counterpart to editHref: the original file on the forge, before
+  // canonicalization, so authors can diff it against /raw/ when a render
+  // surprises them.
+  const sourceHref = $derived(
+    data.pathInSource !== null
+      ? forgeSourceUrl(data.gitSource.repoUrl, data.gitSource.defaultBranch, data.pathInSource)
+      : null,
+  );
+  const sourceForgeName = $derived(forgeName(data.gitSource.repoUrl));
 
   // Sitemap is stored as unknown jsonb; narrow defensively for rendering.
   interface SitemapNode {
@@ -577,10 +589,28 @@
     };
   });
 
+  // Whether ctrl (or cmd on Mac) is held. While held, the copy and edit
+  // buttons swap icon, label, and target to their "view" alternates (raw
+  // markdown / forge source), so the modifier-click shortcut shows what it
+  // will do before the click. Reset on window blur so alt-tabbing away with
+  // the key down doesn't strand the swapped state.
+  let modifierHeld = $state(false);
+  function trackModifier(event: KeyboardEvent): void {
+    if (event.key === "Control" || event.key === "Meta") {
+      modifierHeld = event.type === "keydown";
+    }
+  }
+
+  // The canonicalized markdown endpoint for this doco. Built from the route
+  // params so a pinned @version carries through. Shared by the copy-markdown
+  // button and the "View raw markdown" menu item so they can never disagree.
+  const rawHref = $derived(
+    `/raw/${page.params.org ?? ""}/${page.params.project ?? ""}/${page.params.path ?? ""}`,
+  );
+
   // Copy markdown serves the exact bytes the /raw/ route does (reconstructed
   // frontmatter + docolin.live block + body), so a paste matches a curl or MCP
   // fetch. We hit /raw/ rather than copying doco.bodyText, which is body-only.
-  // The path is taken from the route params so a pinned @version carries through.
   let rawMarkdown = $state<string | null>(null);
   let rawMarkdownPromise: Promise<string> | null = null;
 
@@ -592,18 +622,15 @@
   });
 
   function loadRawMarkdown(): Promise<string> {
-    if (rawMarkdownPromise === null) {
-      const rawUrl = `/raw/${page.params.org ?? ""}/${page.params.project ?? ""}/${page.params.path ?? ""}`;
-      rawMarkdownPromise = fetch(rawUrl)
-        .then((res) => {
-          if (!res.ok) throw new Error(`raw markdown request failed: ${String(res.status)}`);
-          return res.text();
-        })
-        .then((text) => {
-          rawMarkdown = text;
-          return text;
-        });
-    }
+    rawMarkdownPromise ??= fetch(rawHref)
+      .then((res) => {
+        if (!res.ok) throw new Error(`raw markdown request failed: ${String(res.status)}`);
+        return res.text();
+      })
+      .then((text) => {
+        rawMarkdown = text;
+        return text;
+      });
     return rawMarkdownPromise;
   }
 
@@ -650,6 +677,12 @@
     };
   });
 </script>
+
+<svelte:window
+  onkeydown={trackModifier}
+  onkeyup={trackModifier}
+  onblur={() => (modifierHeld = false)}
+/>
 
 <svelte:head>
   <title>{doco.title} · {data.project.displayName ?? data.project.slug} · docolin</title>
@@ -717,43 +750,64 @@
             {doco.title}
           </h1>
           <div class="mt-1 flex shrink-0 items-center gap-2">
-            {#if signedIn}
-              <!-- Moderation actions menu, signed-in only. Report (any user)
-                   routes to admins; Request deletion (moderators) is the
-                   version deletion-request flow. Disabled placeholders until
-                   those flows are wired. -->
-              <DropdownMenu.Root>
-                <DropdownMenu.Trigger>
+            <!-- Per-doco actions menu, public (it now carries a public source
+                 utility, not only moderation). Groups, frequency first and
+                 destructive last: source utilities, then flag & moderate
+                 (Report for any signed-in user, Request deletion for
+                 moderators). -->
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger>
+                {#snippet child({ props })}
+                  <button
+                    {...props}
+                    class="text-muted-foreground hover:text-foreground inline-flex cursor-pointer items-center justify-center p-1.5 transition-colors"
+                    aria-label={m.doco_actions_more()}
+                    title={m.doco_actions_more()}
+                  >
+                    <Ellipsis class="size-3.5" />
+                  </button>
+                {/snippet}
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Content
+                align="end"
+                class="min-w-48 whitespace-nowrap"
+                preventScroll={false}
+              >
+                <!-- The canonicalized markdown this page renders from; pinned
+                     to the version when the URL carries an @ref. -->
+                <DropdownMenu.Item>
                   {#snippet child({ props })}
-                    <button
-                      {...props}
-                      class="text-muted-foreground hover:text-foreground inline-flex cursor-pointer items-center justify-center p-1.5 transition-colors"
-                      aria-label={m.doco_actions_more()}
-                      title={m.doco_actions_more()}
-                    >
-                      <Ellipsis class="size-3.5" />
-                    </button>
+                    <a {...props} href={rawHref} target="_blank" rel="noopener">
+                      <FileCode class="size-4" />
+                      {m.doco_view_raw()}
+                    </a>
                   {/snippet}
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Content
-                  align="end"
-                  class="min-w-48 whitespace-nowrap"
-                  preventScroll={false}
-                >
+                </DropdownMenu.Item>
+                {#if sourceHref}
+                  <DropdownMenu.Item>
+                    {#snippet child({ props })}
+                      <a {...props} href={sourceHref} target="_blank" rel="noopener noreferrer">
+                        <ExternalLink class="size-4" />
+                        {m.doco_view_source({ forge: sourceForgeName })}
+                      </a>
+                    {/snippet}
+                  </DropdownMenu.Item>
+                {/if}
+                {#if signedIn}
+                  <DropdownMenu.Separator />
                   <DropdownMenu.Item onSelect={openReport}>
                     <Flag class="size-4" />
                     {m.doco_report()}
                   </DropdownMenu.Item>
                   {#if canModerate}
-                    <DropdownMenu.Separator />
                     <DropdownMenu.Item variant="destructive" onSelect={openRequestDeletion}>
                       <Trash2 class="size-4" />
                       {m.doco_request_deletion()}
                     </DropdownMenu.Item>
                   {/if}
-                </DropdownMenu.Content>
-              </DropdownMenu.Root>
-            {/if}
+                {/if}
+              </DropdownMenu.Content>
+            </DropdownMenu.Root>
             <a
               href={discussionsHref}
               class="border-primary/40 bg-primary/5 text-foreground hover:border-primary hover:bg-primary/10 inline-flex items-center gap-1.5 border px-3 py-1.5 text-xs font-medium transition-colors"
@@ -761,16 +815,36 @@
               <MessagesSquare class="size-3.5" />
               {m.doco_discussions_button()}
             </a>
+            <!-- Copy and edit share one gesture rulebook: plain click = act
+                 (copy / edit), ctrl/cmd or middle click = view (raw markdown /
+                 forge source). Holding ctrl swaps icon and label to announce
+                 the alternate. The visible paths to the same documents live in
+                 the actions menu. -->
             <button
               type="button"
-              onclick={() => void copyMarkdown()}
+              onclick={(event) => {
+                if (event.ctrlKey || event.metaKey) {
+                  window.open(rawHref, "_blank", "noopener");
+                  return;
+                }
+                void copyMarkdown();
+              }}
+              onauxclick={(event) => {
+                if (event.button === 1) window.open(rawHref, "_blank", "noopener");
+              }}
               onpointerenter={() => void loadRawMarkdown()}
               onfocus={() => void loadRawMarkdown()}
               class="border-foreground/15 hover:border-foreground/40 text-muted-foreground hover:text-foreground inline-flex cursor-pointer items-center justify-center border p-1.5 transition-colors"
-              aria-label={m.doco_copy_markdown_aria()}
-              title={copiedMarkdown ? m.doco_copy_markdown_done() : m.doco_copy_markdown()}
+              aria-label={modifierHeld ? m.doco_view_raw() : m.doco_copy_markdown_aria()}
+              title={modifierHeld
+                ? m.doco_view_raw()
+                : copiedMarkdown
+                  ? m.doco_copy_markdown_done()
+                  : m.doco_copy_markdown()}
             >
-              {#if copiedMarkdown}
+              {#if modifierHeld}
+                <FileCode class="size-3.5" />
+              {:else if copiedMarkdown}
                 <Check class="size-3.5" />
               {:else}
                 <Copy class="size-3.5" />
@@ -779,17 +853,36 @@
             {#if editHref}
               <!-- Icon-only edit affordance. Lower attention than copy markdown
                    (smaller audience of would-be editors), pencil icon is the
-                   standard pattern; the tooltip carries the full label. -->
-              <a
-                href={editHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                class="border-foreground/15 hover:border-foreground/40 text-muted-foreground hover:text-foreground inline-flex items-center justify-center border p-1.5 transition-colors"
-                aria-label={m.doco_edit_on_github()}
-                title={m.doco_edit_on_github()}
+                   standard pattern; the tooltip carries the full label.
+                   A button (not a link) so it shares the copy button's gesture
+                   rulebook: plain click = act (edit), ctrl/cmd or middle click
+                   = view (forge source), icon swap on hold telegraphs it. -->
+              <button
+                type="button"
+                onclick={(event) => {
+                  window.open(
+                    event.ctrlKey || event.metaKey ? (sourceHref ?? editHref) : editHref,
+                    "_blank",
+                    "noopener",
+                  );
+                }}
+                onauxclick={(event) => {
+                  if (event.button === 1) window.open(sourceHref ?? editHref, "_blank", "noopener");
+                }}
+                class="border-foreground/15 hover:border-foreground/40 text-muted-foreground hover:text-foreground inline-flex cursor-pointer items-center justify-center border p-1.5 transition-colors"
+                aria-label={modifierHeld
+                  ? m.doco_view_source({ forge: sourceForgeName })
+                  : m.doco_edit_on_github()}
+                title={modifierHeld
+                  ? m.doco_view_source({ forge: sourceForgeName })
+                  : m.doco_edit_on_github()}
               >
-                <Pencil class="size-3.5" />
-              </a>
+                {#if modifierHeld}
+                  <ExternalLink class="size-3.5" />
+                {:else}
+                  <Pencil class="size-3.5" />
+                {/if}
+              </button>
             {/if}
           </div>
         </div>

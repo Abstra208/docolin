@@ -52,3 +52,10 @@ export function codebergEditUrl(repoUrl: string, branch: string, path: string): 
   const encodedPath = path.split("/").map(encodeURIComponent).join("/");
   return `${base}/_edit/${encodeURIComponent(branch)}/${encodedPath}`;
 }
+
+/** Forgejo's read-only file view (the `src/branch` route), mirroring githubBlobUrl. */
+export function codebergSourceUrl(repoUrl: string, branch: string, path: string): string {
+  const base = trimTrailingSlash(repoUrl);
+  const encodedPath = path.split("/").map(encodeURIComponent).join("/");
+  return `${base}/src/branch/${encodeURIComponent(branch)}/${encodedPath}`;
+}
