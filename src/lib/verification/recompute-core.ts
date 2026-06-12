@@ -11,7 +11,12 @@ import {
   type ScoringStamp,
   type StampOutcome,
 } from "./score";
-import { computePersonWeight, DEFAULT_BASE_WEIGHT, type StampSource } from "./weights";
+import {
+  computeCompetenceWeight,
+  computePersonWeight,
+  DEFAULT_BASE_WEIGHT,
+  type StampSource,
+} from "./weights";
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
@@ -26,9 +31,16 @@ export interface StampRow {
   source: StampSource;
   voterUserId: string | null;
   clusterId: string | null;
+  networkBucket: string | null;
   createdAt: Date;
   voterCreatedAt: Date | null;
 }
+
+// Correlation assumed between anonymous stamps from the same network bucket.
+// High: an anonymous burst from one /24 is one opinion echoing, so the second
+// and later stamps add little. Signed-in stamps are deduped per voter instead
+// and never bucket-clustered.
+const ANON_SAME_NETWORK_RHO = 0.8;
 
 export interface StampSummary {
   /** 0-1000 reliability score, or null when below the display gate. */
@@ -51,6 +63,38 @@ export function daysBetween(earlier: Date, later: Date): number {
   return (later.getTime() - earlier.getTime()) / MS_PER_DAY;
 }
 
+/** One row of a voter's history: their verdict on a version, next to where
+ *  that version's displayed score settled. */
+export interface VoterHistoryRow {
+  outcome: StampOutcome;
+  versionScore: number;
+}
+
+// Consensus bands for the track record. Versions scoring between the bands are
+// contested; nobody's competence should move on them.
+const CONSENSUS_POSITIVE_MIN = 600;
+const CONSENSUS_NEGATIVE_MAX = 400;
+
+/**
+ * Track-record competence weight from a voter's historical stamps, compared to
+ * the consensus each stamped version settled on. Stateless by design: no
+ * stored counters to drift; as consensus shifts, the next recompute re-judges.
+ * "worked with caveats" counts as a positive verdict (the guide worked).
+ */
+export function competenceWeightFromHistory(history: VoterHistoryRow[]): number {
+  let agreed = 0;
+  let disagreed = 0;
+  for (const row of history) {
+    const consensusPositive = row.versionScore >= CONSENSUS_POSITIVE_MIN;
+    const consensusNegative = row.versionScore <= CONSENSUS_NEGATIVE_MAX;
+    if (!consensusPositive && !consensusNegative) continue;
+    const votedPositive = row.outcome !== "didnt_work";
+    if (votedPositive === consensusPositive) agreed += 1;
+    else disagreed += 1;
+  }
+  return computeCompetenceWeight({ agreed, disagreed });
+}
+
 // Keeps each signed-in voter's latest stamp (a later stamp supersedes an earlier
 // one on the same version, so repeated stamping cannot multiply a voter's
 // weight) and keeps every anonymous stamp (no identity to dedupe on; correlated
@@ -71,7 +115,20 @@ function dedupeLatestPerVoter(rows: StampRow[]): StampRow[] {
   return [...latestByVoter.values(), ...anonymous];
 }
 
-function toScoringStamp(row: StampRow, now: Date): ScoringStamp {
+// A stamp's cluster: an explicitly-assigned detector cluster wins; otherwise
+// anonymous stamps from the same network bucket share one, and everything else
+// is its own singleton (no collapse).
+function clusterIdFor(row: StampRow): string {
+  if (row.clusterId !== null) return row.clusterId;
+  if (row.voterUserId === null && row.networkBucket !== null) return `net:${row.networkBucket}`;
+  return row.id;
+}
+
+function toScoringStamp(
+  row: StampRow,
+  now: Date,
+  competenceByVoter: ReadonlyMap<string, number>,
+): ScoringStamp {
   // Anonymous (or a deleted voter whose id was nulled) gets no person boost; it
   // rides on its tiny source base weight alone.
   const personWeight =
@@ -85,14 +142,25 @@ function toScoringStamp(row: StampRow, now: Date): ScoringStamp {
     outcome: row.outcome,
     baseWeight: DEFAULT_BASE_WEIGHT[row.source],
     personWeight,
-    // Competence is neutral until track records exist; wired here so it sharpens
-    // later without touching the scorer.
-    competenceWeight: 1,
+    // Track-record weight, computed by the caller from the voter's historical
+    // stamps vs the consensus those versions settled on (recompute.ts).
+    // Neutral for anonymous stamps and voters without a record.
+    competenceWeight: row.voterUserId === null ? 1 : (competenceByVoter.get(row.voterUserId) ?? 1),
     ageDays: daysBetween(row.createdAt, now),
-    // Uncorrelated stamps each form their own singleton cluster (no collapse)
-    // until the anti-abuse detector assigns shared cluster ids.
-    clusterId: row.clusterId ?? row.id,
+    clusterId: clusterIdFor(row),
   };
+}
+
+// rho per cluster: anonymous same-network clusters get the fixed correlation;
+// detector-assigned clusters can refine this later. Singletons need no entry
+// (absent = independent).
+function buildClusterRho(rows: StampRow[]): Map<string, number> {
+  const rho = new Map<string, number>();
+  for (const row of rows) {
+    const id = clusterIdFor(row);
+    if (id.startsWith("net:")) rho.set(id, ANON_SAME_NETWORK_RHO);
+  }
+  return rho;
 }
 
 /**
@@ -106,12 +174,18 @@ export function summarizeStamps(
   rows: StampRow[],
   now: Date = new Date(),
   previousRankingScore: number | null = null,
+  competenceByVoter: ReadonlyMap<string, number> = new Map(),
 ): StampSummary {
   const kept = dedupeLatestPerVoter(rows);
-  const scoringStamps = kept.map((row) => toScoringStamp(row, now));
+  const scoringStamps = kept.map((row) => toScoringStamp(row, now, competenceByVoter));
+  const clusterRho = buildClusterRho(kept);
 
-  const result = computeScore(scoringStamps);
-  const rankingScore = computeRankingScore(scoringStamps, inheritedPriorMean(previousRankingScore));
+  const result = computeScore(scoringStamps, clusterRho);
+  const rankingScore = computeRankingScore(
+    scoringStamps,
+    inheritedPriorMean(previousRankingScore),
+    clusterRho,
+  );
 
   let lastConfirmedAt: Date | null = null;
   for (const row of kept) {

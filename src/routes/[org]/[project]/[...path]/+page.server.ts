@@ -11,6 +11,7 @@ import { fileDeletionRequest, submitReport } from "$lib/server/moderation";
 import { pathFromSourcePath, rebuildPathInSource, parseVersionRef } from "$lib/doco-urls";
 import { resolveAuthors, type ResolvedAuthor } from "$lib/server/authors";
 import { recordStamp } from "$lib/verification/ingest";
+import { stampNetworkBucket } from "$lib/server/stamp-bucket";
 import type { StampOutcome } from "$lib/verification/score";
 import { LIMITS } from "$lib/limits";
 // Dev-only markdown playground registry, shared with the link-preview endpoint.
@@ -469,7 +470,7 @@ export const actions = {
     return { action: "requestDeletion", ok: true };
   },
 
-  stamp: async ({ request, params, locals }) => {
+  stamp: async ({ request, params, locals, getClientAddress }) => {
     const form = await request.formData();
     const versionId = fieldStr(form, "versionId");
     const outcome = fieldStr(form, "outcome");
@@ -495,8 +496,9 @@ export const actions = {
       outcome,
       source: voter ? "human" : "anonymous",
       voterUserId: voter ? voter.id : null,
-      // Network bucket + rate limiting land with the holistic anti-abuse pass.
-      networkBucket: null,
+      // Keyed coarse network bucket: lets scoring discount correlated
+      // anonymous bursts from one network without ever storing an address.
+      networkBucket: await stampNetworkBucket(getClientAddress()),
     });
 
     // The write stays a single insert. The score recompute is debounced off the

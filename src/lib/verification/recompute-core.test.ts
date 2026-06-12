@@ -1,5 +1,11 @@
 import { describe, it, expect } from "bun:test";
-import { summarizeStamps, daysBetween, type StampRow } from "./recompute-core";
+import {
+  competenceWeightFromHistory,
+  summarizeStamps,
+  daysBetween,
+  type StampRow,
+  type VoterHistoryRow,
+} from "./recompute-core";
 
 const NOW = new Date("2026-05-24T00:00:00Z");
 const OLD_ACCOUNT = new Date("2024-01-01T00:00:00Z"); // well over a year old
@@ -13,6 +19,7 @@ function row(overrides: Partial<StampRow> = {}): StampRow {
     source: "human",
     voterUserId: `voter-${seq.toString()}`,
     clusterId: null,
+    networkBucket: null,
     createdAt: NOW,
     voterCreatedAt: OLD_ACCOUNT,
     ...overrides,
@@ -115,5 +122,100 @@ describe("summarizeStamps rankingScore", () => {
     expect(summarizeStamps([], NOW, 900).rankingScore).toBeGreaterThan(
       summarizeStamps([], NOW, null).rankingScore,
     );
+  });
+});
+
+describe("anonymous same-network clustering", () => {
+  it("collapses an anonymous burst from one network bucket", () => {
+    const burstSameNetwork = Array.from({ length: 10 }, () =>
+      row({ voterUserId: null, voterCreatedAt: null, source: "anonymous", networkBucket: "aa" }),
+    );
+    const burstSpread = Array.from({ length: 10 }, (_, i) =>
+      row({
+        voterUserId: null,
+        voterCreatedAt: null,
+        source: "anonymous",
+        networkBucket: `bucket-${i.toString()}`,
+      }),
+    );
+    const same = summarizeStamps(burstSameNetwork, NOW);
+    const spread = summarizeStamps(burstSpread, NOW);
+    // Same-network stamps are mostly one echoed opinion; their evidence must
+    // accumulate far slower than genuinely independent ones.
+    expect(same.effectiveWeight).toBeLessThan(spread.effectiveWeight * 0.5);
+  });
+
+  it("leaves anonymous stamps without a bucket independent", () => {
+    const unbucketed = Array.from({ length: 5 }, () =>
+      row({ voterUserId: null, voterCreatedAt: null, source: "anonymous", networkBucket: null }),
+    );
+    const spread = Array.from({ length: 5 }, (_, i) =>
+      row({
+        voterUserId: null,
+        voterCreatedAt: null,
+        source: "anonymous",
+        networkBucket: `b-${i.toString()}`,
+      }),
+    );
+    expect(summarizeStamps(unbucketed, NOW).effectiveWeight).toBeCloseTo(
+      summarizeStamps(spread, NOW).effectiveWeight,
+      6,
+    );
+  });
+
+  it("never bucket-clusters signed-in voters", () => {
+    const signedInSameNetwork = [
+      row({ networkBucket: "shared" }),
+      row({ networkBucket: "shared" }),
+    ];
+    const signedInSpread = [row({ networkBucket: "x" }), row({ networkBucket: "y" })];
+    expect(summarizeStamps(signedInSameNetwork, NOW).effectiveWeight).toBeCloseTo(
+      summarizeStamps(signedInSpread, NOW).effectiveWeight,
+      6,
+    );
+  });
+});
+
+describe("competenceWeightFromHistory", () => {
+  const agree = (n: number): VoterHistoryRow[] =>
+    Array.from({ length: n }, () => ({ outcome: "worked" as const, versionScore: 900 }));
+  const disagree = (n: number): VoterHistoryRow[] =>
+    Array.from({ length: n }, () => ({ outcome: "worked" as const, versionScore: 100 }));
+
+  it("is neutral with no history", () => {
+    expect(competenceWeightFromHistory([])).toBe(1);
+  });
+
+  it("rises with a consistently-correct record and falls with a wrong one", () => {
+    const good = competenceWeightFromHistory(agree(20));
+    const bad = competenceWeightFromHistory(disagree(20));
+    expect(good).toBeGreaterThan(1);
+    expect(bad).toBeLessThan(1);
+  });
+
+  it("ignores contested versions between the consensus bands", () => {
+    const contested: VoterHistoryRow[] = [
+      { outcome: "worked", versionScore: 500 },
+      { outcome: "didnt_work", versionScore: 450 },
+    ];
+    expect(competenceWeightFromHistory(contested)).toBe(1);
+  });
+
+  it("counts worked-with-caveats as a positive verdict", () => {
+    const caveats: VoterHistoryRow[] = [{ outcome: "worked_with_caveats", versionScore: 900 }];
+    expect(competenceWeightFromHistory(caveats)).toBeGreaterThan(1);
+  });
+});
+
+describe("competence in summarizeStamps", () => {
+  it("weights a proven voter's stamp above an unknown voter's", () => {
+    const proven = summarizeStamps(
+      [row({ voterUserId: "expert" })],
+      NOW,
+      null,
+      new Map([["expert", 2]]),
+    );
+    const unknown = summarizeStamps([row({ voterUserId: "newcomer" })], NOW, null, new Map());
+    expect(proven.effectiveWeight).toBeGreaterThan(unknown.effectiveWeight);
   });
 });
