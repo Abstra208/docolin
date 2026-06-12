@@ -183,6 +183,13 @@
       "when": 1781291670110,
       "tag": "0025_absurd_the_initiative",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1781293379187,
+      "tag": "0026_latest-versions-plain-view",
+      "breakpoints": true
     }
   ]
 }

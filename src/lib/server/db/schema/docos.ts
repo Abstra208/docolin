@@ -5,7 +5,7 @@ import {
   index,
   integer,
   jsonb,
-  pgMaterializedView,
+  pgView,
   pgTable,
   text,
   timestamp,
@@ -226,15 +226,19 @@ export const versions = pgTable(
   ],
 );
 
-// Materialized projection of the latest published version per doco. Search indexes
-// (HNSW for embeddings, BM25 via pg_search) and the refresh trigger are added in a
-// follow-up migration when the search query layer is wired up; the projection itself
-// is defined here so the type is known and the table is in place from the start.
+// Projection of the latest published version per doco, the shared listing
+// surface (profiles, browse, sitemap). A PLAIN view, deliberately: this
+// started life as a materialized view whose promised refresh trigger never
+// got built (search ended up querying `versions` directly), so it served a
+// frozen snapshot on dev and sat empty in production. Every consumer is
+// edge-cached, so the join runs on cache misses only, over the versions
+// table's is_latest partial indexes; freshness for free beats refresh
+// machinery nobody maintains.
 //
 // Defined with explicit column types + raw SQL because Drizzle's query-builder form
-// doesn't apply field aliases inside materialized views (both `docos.id` and
+// doesn't apply field aliases inside views (both `docos.id` and
 // `versions.id` would collide as `id` in the resulting view).
-export const latestVersions = pgMaterializedView("latest_versions", {
+export const latestVersions = pgView("latest_versions", {
   docoId: uuid("doco_id").notNull(),
   versionId: uuid("version_id").notNull(),
   versionNumber: integer("version_number").notNull(),
