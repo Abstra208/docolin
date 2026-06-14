@@ -37,9 +37,11 @@ A [relative link](./tables.md), an [anchor](#soft-links-by-kind), and an
 [external link](https://lucide.dev).
 ```
 
-- **Relative links** (`./tables.md`) point within your own project; the most common kind, and the most robust, since they move with your files.
-- **Anchors** (`#heading-id`) jump within a page, using the [auto-generated heading ids](./text-and-lists.md#headings).
-- **External links** open in a new tab with `rel="noopener noreferrer"` added for you.
+- **Relative links** (`./tables.md`, `../reference/cli.md`) are the most common kind, and the most robust, since they move with your files when you rename or reorganize. docolin resolves them by what they point at:
+  - a **Markdown doco** (`./tables.md`) becomes a link to that doco's page here on docolin;
+  - **any other file in your repo** (`./reset-network.sh`, `../src/config.ts`) becomes a link to that file in your source repo on the forge (GitHub, Codeberg, ...), pinned to the commit docolin last synced, so it always points at the exact version your doco was built from.
+- **Anchors** (`#heading-id`) jump within the current page, using the [auto-generated heading ids](./text-and-lists.md#headings).
+- **External links** (`https://...`) open in a new tab with `rel="noopener noreferrer"` added for you. A full URL is also the **override**: reach for one to step outside the rules above, for instance to link a repo file at `main` instead of the synced commit.
 
 Hover an internal link and docolin shows a small preview of the target's title and description, so a reader can judge whether to follow it without leaving the page.
 
@@ -92,7 +94,7 @@ docolin:
 (Every page in this guide uses them; that is the row of links below.)
 
 !!! tip "Prefer relative paths inside your project"
-    A relative `./other.md` (or a hard URL to your own project) renders as a rich card with the target's title and description. Soft links, cross-project links, and external URLs still work but render as plain links, since docolin can't resolve a title for them up front.
+    A relative `./other.md` (or a hard URL to your own project) that points at a published doco renders as a rich card with the target's title and kind path. Everything else still works but renders as a plain link, since docolin can't resolve a title for it up front: soft links, cross-project links, external URLs, a relative link to a repo file (which resolves to the file on the forge), or a doco that hasn't been published yet.
 
 ## The sidebar
 
@@ -111,6 +113,8 @@ sitemap:
 ```
 
 It is a recursive list of `{ title, url?, children? }` entries. Each entry is **either** a link (has `url`) **or** a group (has `children`), never both. A `url` accepts any link form: relative path, hard URL, soft URL by kind, or external. `title` is always required.
+
+A relative `url` resolves against this `doco_sitemap.yaml` file's own location, like a relative link in a doco body, so it moves with your files. In a per-doco frontmatter `sitemap:` override, relative URLs resolve against the doco instead.
 
 ### Cascading
 
