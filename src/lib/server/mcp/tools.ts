@@ -39,11 +39,15 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "lookup",
     description:
-      "Fast keyword / known-item search over docolin docos (exact terms, commands, error strings, names). Prefer this for precise lookups; it is the cheap, cacheable path. Returns ranked docos with id + url for fetch.",
+      "Fast, cheap, cacheable keyword search over docolin docos (exact terms, commands, error strings, names); try it first. It matches ALL the words you pass (AND), so give only the distinguishing keywords, never a full sentence, because a natural-language question over-narrows it and returns little or nothing. If it comes back empty, drop words or switch to search. Returns ranked docos with id + url for fetch.",
     inputSchema: {
       type: "object",
       properties: {
-        query: { type: "string", description: "Exact terms, command, or doco name." },
+        query: {
+          type: "string",
+          description:
+            "Distinguishing keywords only (command, package, error string, doco name), never a sentence. All words must match.",
+        },
         kind: { type: "string", description: "Optional topic path filter, e.g. os/linux." },
         applies_to: { ...stringArray, description: "Optional setup tags to boost (ubuntu, ...)." },
         limit: { type: "number", description: "Max results (default 8)." },
@@ -54,7 +58,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "search",
     description:
-      "Semantic (hybrid) search over docolin docos for conceptual or natural-language questions. Costlier than lookup; use it when lookup misses. Returns ranked docos with older verified versions as alternates.",
+      "Semantic (hybrid) search for conceptual or natural-language questions; a full-sentence question works well here, unlike lookup. Costlier than lookup; reach for it when lookup's keywords miss or the query is vague. Returns ranked docos with older verified versions as alternates.",
     inputSchema: {
       type: "object",
       properties: {
