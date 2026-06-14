@@ -3,51 +3,55 @@
 # override it for that subtree, and a doco's frontmatter `sitemap:` overrides it
 # per page. Same recursive shape as the frontmatter field: { title, url?,
 # children? } with url xor children per entry.
+#
+# URLs are relative to this file's location (docs/), like everyday doco links, so
+# they move with the files instead of hard-coding /docolin/docolin/... A relative
+# .md path resolves to the doco's website URL at sync time.
 
 sitemap:
   - title: Getting started
     children:
       - title: Overview
-        url: /docolin/docolin/authoring/overview
+        url: ./authoring/overview.md
       - title: Your first doco
-        url: /docolin/docolin/authoring/quickstart
+        url: ./authoring/quickstart.md
       - title: Frontmatter
-        url: /docolin/docolin/authoring/frontmatter
+        url: ./authoring/frontmatter.md
   - title: The basics
     children:
       - title: Text, lists, and links
-        url: /docolin/docolin/authoring/text-and-lists
+        url: ./authoring/text-and-lists.md
       - title: Tables
-        url: /docolin/docolin/authoring/tables
+        url: ./authoring/tables.md
       - title: Code blocks
-        url: /docolin/docolin/authoring/code-blocks
+        url: ./authoring/code-blocks.md
   - title: Rich blocks
     children:
       - title: Callouts
-        url: /docolin/docolin/authoring/callouts
+        url: ./authoring/callouts.md
       - title: Content tabs
-        url: /docolin/docolin/authoring/tabs
+        url: ./authoring/tabs.md
       - title: Cards
-        url: /docolin/docolin/authoring/cards
+        url: ./authoring/cards.md
       - title: Steps & accordion
-        url: /docolin/docolin/authoring/steps-and-accordion
+        url: ./authoring/steps-and-accordion.md
   - title: Visuals & math
     children:
       - title: Diagrams
-        url: /docolin/docolin/authoring/diagrams
+        url: ./authoring/diagrams.md
       - title: Charts
-        url: /docolin/docolin/authoring/charts
+        url: ./authoring/charts.md
       - title: Math
-        url: /docolin/docolin/authoring/math
+        url: ./authoring/math.md
   - title: Depth & craft
     children:
       - title: Footnotes & annotations
-        url: /docolin/docolin/authoring/footnotes-and-annotations
+        url: ./authoring/footnotes-and-annotations.md
       - title: Links & navigation
-        url: /docolin/docolin/authoring/links-and-navigation
+        url: ./authoring/links-and-navigation.md
       - title: Writing well
-        url: /docolin/docolin/authoring/writing-well
+        url: ./authoring/writing-well.md
   - title: Policies
     children:
       - title: Moderation policy
-        url: /docolin/docolin/moderation-policy
+        url: ./moderation-policy.md

@@ -80,7 +80,7 @@ authors:
 - `{ handle: <docolin-handle> }` for contributors with a docolin account.
 - `{ name: <string>, username?: <string>, url?: <string> }` for external contributors.
 
-Each entry has exactly one of `handle` or `name`. `handle` entries resolve to the user's internal account id at parse time, so credit stays pinned to the right account. External entries are stored as written; docolin does not try to auto-match them to accounts.
+Each entry has exactly one of `handle` or `name`. `handle` entries resolve to the user's internal account id at sync time, so credit stays pinned to the right account. External entries are stored as written; docolin does not try to auto-match them to accounts.
 
 Authors are written by hand, not scraped from git history. A source repo that wants updated credit edits the frontmatter. Attribution flows all the way through to AI citations: when an MCP-grounded answer cites your guide, the listed authors are who it names.
 
@@ -301,7 +301,7 @@ A guide is valid when:
 Validation runs at publish time. An invalid guide is rejected with a specific message about what failed.
 
 !!! note "Planned"
-    Several deeper checks (registry-matched `kind` and `applies_to`, resolving `prev`/`next`/`superseded_by` to existing guides, the aliases warning) are planned. Today the shape and the rules above are enforced; unresolved links fall back to rendering the raw string at render time.
+    Several deeper checks (registry-matched `kind` and `applies_to`, resolving `prev`/`next`/`superseded_by` to existing guides, the aliases warning) are planned. Today the shape and the rules above are enforced; a `prev`/`next` that doesn't resolve to a published doco isn't rejected, it just renders as a plain link instead of a rich card.
 
 ## What's intentionally not here
 
